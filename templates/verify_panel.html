@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}Verify Reports{% endblock %}
+
+{% block content %}
+    <section class="verify-panel">
+        <h2>Report Verification</h2>
+        <p>Review and verify user-submitted disaster reports</p>
+        
+        <div class="verification-list">
+            <table id="verification-table">
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Title</th>
+                        <th>Description</th>
+                        <th>Location</th>
+                        <th>Severity</th>
+                        <th>Reported</th>
+                        <th>Contact</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="reports-to-verify">
+                    <!-- Will be populated by JavaScript -->
+                    <tr>
+                        <td colspan="8">Loading reports...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+    
+    <div id="report-detail-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h3>Report Details</h3>
+            <div id="report-detail-content">
+                <!-- Will be populated when a report is clicked -->
+            </div>
+            <div class="modal-actions">
+                <button id="verify-report" class="btn-verify">Verify Report</button>
+                <button id="reject-report" class="btn-reject">Reject Report</button>
+                <button id="request-more-info" class="btn-neutral">Request More Info</button>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            loadReportsForVerification();
+            
+            // Close modal when clicking X
+            document.querySelector('.close-modal').addEventListener('click', function() {
+                document.getElementById('report-detail-modal').style.display = 'none';
+            });
+            
+            // Close modal when clicking outside
+            window.addEventListener('click', function(event) {
+                const modal = document.getElementById('report-detail-modal');
+                if (event.target === modal) {
+                    modal.style.display = 'none';
+                }
+            });
+            
+            // Set up modal action buttons
+            document.getElementById('verify-report').addEventListener('click', function() {
+                const reportId = this.getAttribute('data-report-id');
+                verifyReport(reportId, true);
+            });
+            
+            document.getElementById('reject-report').addEventListener('click', function() {
+                const reportId = this.getAttribute('data-report-id');
+                verifyReport(reportId, false);
+            });
+            
+            document.getElementById('request-more-info').addEventListener('click', function() {
+                const email = this.getAttribute('data-contact');
+                alert(`In a real implementation, this would send an email to ${email}`);
+            });
+        });
+        
+        function loadReportsForVerification() {
+            // In a real application, this would fetch from the server
+            // For demo purposes, we'll use dummy data
+            
+            // Simulate API call delay
+            setTimeout(function() {
+                const reports = [
+                    {
+                        "id": "user-rp-1005",
+                        "type": "flood", 
+                        "title": "Street flooding in downtown",
+                        "description": "Several streets in the downtown area are flooded after heavy rain.",
+                       "lat": 40.7128,
+                        "lng": -74.0060,
+                        "timestamp": new Date().toISOString(),
+                        "severity": 2,
+                        "verified": false,
+                        "source": "User Report",
+                        "contact": "anonymous@example.com"
+                    },
+                    {
+                        "id": "user-rp-1006",
+                        "type": "storm",
+                        "title": "Power outages from storm",
+                        "description": "Strong winds have knocked down power lines in the eastern suburbs.",
+                        "lat": 40.7328,
+                        "lng": -73.9860,
+                        "timestamp": new Date().toISOString(),
+                        "severity": 3,
+                        "verified": false,
+                        "source": "User Report",
+                        "contact": "resident@example.com"
+                    }
+                ];
+                
+                const tbody = document.getElementById('reports-to-verify');
+                tbody.innerHTML = '';
+                
+                reports.forEach(report => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${report.type}</td>
+                        <td>${report.title}</td>
+                        <td>${report.description.substring(0, 50)}...</td>
+                        <td>${report.lat.toFixed(2)}, ${report.lng.toFixed(2)}</td>
+                        <td>${report.severity}</td>
+                        <td>${new Date(report.timestamp).toLocaleString()}</td>
+                        <td>${report.contact}</td>
+                        <td>
+                            <button class="btn-view" data-report-id="${report.id}">View</button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                    
+                    // Add event listener to view button
+                    row.querySelector('.btn-view').addEventListener('click', function() {
+                        showReportDetail(report);
+                    });
+                });
+            }, 500);
+        }
+        
+        function showReportDetail(report) {
+            const modal = document.getElementById('report-detail-modal');
+            const content = document.getElementById('report-detail-content');
+            
+            content.innerHTML = `
+                <h4>${report.title}</h4>
+                <p><strong>Type:</strong> ${report.type}</p>
+                <p><strong>Description:</strong> ${report.description}</p>
+                <p><strong>Location:</strong> ${report.lat.toFixed(4)}, ${report.lng.toFixed(4)}</p>
+                <p><strong>Severity:</strong> ${report.severity} out of 5</p>
+                <p><strong>Reported:</strong> ${new Date(report.timestamp).toLocaleString()}</p>
+                <p><strong>Reporter Contact:</strong> ${report.contact}</p>
+            `;
+            
+            // Set report ID for action buttons
+            document.getElementById('verify-report').setAttribute('data-report-id', report.id);
+            document.getElementById('reject-report').setAttribute('data-report-id', report.id);
+            document.getElementById('request-more-info').setAttribute('data-contact', report.contact);
+            
+            modal.style.display = 'block';
+        }
+        
+        function verifyReport(reportId, isVerified) {
+            // In a real app, this would send an AJAX request to the server
+            alert(`Report ${reportId} has been ${isVerified ? 'verified' : 'rejected'}`);
+            document.getElementById('report-detail-modal').style.display = 'none';
+            
+            // Refresh the list
+            loadReportsForVerification();
+        }
+    </script>
+{% endblock %}

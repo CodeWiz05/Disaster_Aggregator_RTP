@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}Report a Disaster{% endblock %}
+
+{% block content %}
+    <section class="report-form-container">
+        <h2>Report a Disaster</h2>
+        <p>Help others by reporting disasters in your area. Verified reports will appear on our map.</p>
+        
+        <form id="disaster-report-form" method="post">
+            <div class="form-group">
+                <label for="disaster-type">Disaster Type:</label>
+                <select id="disaster-type" name="disaster_type" required>
+                    <option value="">Select Type</option>
+                    <option value="earthquake">Earthquake</option>
+                    <option value="flood">Flood</option>
+                    <option value="wildfire">Wildfire</option>
+                    <option value="storm">Storm</option>
+                    <option value="landslide">Landslide</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="disaster-title">Title:</label>
+                <input type="text" id="disaster-title" name="title" placeholder="Brief title of the disaster" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="disaster-description">Description:</label>
+                <textarea id="disaster-description" name="description" rows="4" placeholder="Provide details about what happened" required></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label for="disaster-location">Location:</label>
+                <input type="text" id="disaster-location" name="location" placeholder="City, Country" required>
+            </div>
+            
+            <div class="form-group map-picker">
+                <label>Pin Location on Map:</label>
+                <div id="location-picker-map"></div>
+                <p class="helper-text">Click on the map to set the location or use the search box above</p>
+                <input type="hidden" id="disaster-lat" name="latitude">
+                <input type="hidden" id="disaster-lng" name="longitude">
+            </div>
+            
+            <div class="form-group">
+                <label for="disaster-severity">Severity (1-5):</label>
+                <select id="disaster-severity" name="severity" required>
+                    <option value="1">1 - Minor</option>
+                    <option value="2">2 - Moderate</option>
+                    <option value="3">3 - Significant</option>
+                    <option value="4">4 - Severe</option>
+                    <option value="5">5 - Extreme</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="disaster-media">Photos/Videos (optional):</label>
+                <input type="file" id="disaster-media" name="media" accept="image/*, video/*">
+                <p class="helper-text">Max file size: 10MB</p>
+            </div>
+            
+            <div class="form-group">
+                <label for="reporter-email">Your Email:</label>
+                <input type="email" id="reporter-email" name="email" placeholder="For verification and updates" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="reporter-phone">Phone (optional):</label>
+                <input type="tel" id="reporter-phone" name="phone" placeholder="If we need additional information">
+            </div>
+            
+            <div class="form-group">
+                <button type="submit">Submit Report</button>
+            </div>
+        </form>
+        
+        <div class="reporting-tips">
+            <h3>Tips for Accurate Reporting</h3>
+            <ul>
+                <li>Be as specific as possible about the location</li>
+                <li>Include the time and date when you observed the disaster</li>
+                <li>Note any immediate dangers or ongoing threats</li>
+                <li>Photos help tremendously with verification</li>
+                <li>Only report what you have directly observed</li>
+            </ul>
+        </div>
+    </section>
+{% endblock %}
+
+{% block scripts %}
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize location picker map
+            const pickerMap = L.map('location-picker-map').setView([0, 0], 2);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(pickerMap);
+            
+            let marker = null;
+            
+            pickerMap.on('click', function(e) {
+                const lat = e.latlng.lat;
+                const lng = e.latlng.lng;
+                
+                document.getElementById('disaster-lat').value = lat;
+                document.getElementById('disaster-lng').value = lng;
+                
+                if (marker) {
+                    pickerMap.removeLayer(marker);
+                }
+                
+                marker = L.marker([lat, lng]).addTo(pickerMap);
+            });
+            
+            // Try to get user's location
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(function(position) {
+                    pickerMap.setView([position.coords.latitude, position.coords.longitude], 10);
+                });
+            }
+            
+            // Handle form submission
+            document.getElementById('disaster-report-form').addEventListener('submit', function(e) {
+                if (!document.getElementById('disaster-lat').value) {
+                    e.preventDefault();
+                    alert('Please select a location on the map.');
+                }
+            });
+        });
+    </script>
+{% endblock %}

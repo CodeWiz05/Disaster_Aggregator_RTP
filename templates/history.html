@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block title %}Historical Disaster Data{% endblock %}
+
+{% block content %}
+    <section class="history-page">
+        <h2>Historical Disaster Data</h2>
+        <p>Analysis and trends of past disasters</p>
+        
+        <div class="filter-controls">
+            <h3>Filter Data</h3>
+            <div class="filter-row">
+                <div>
+                    <label for="history-type">Disaster Type:</label>
+                    <select id="history-type">
+                        <option value="all">All Types</option>
+                        <option value="earthquake">Earthquakes</option>
+                        <option value="flood">Floods</option>
+                        <option value="wildfire">Wildfires</option>
+                        <option value="storm">Storms</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="history-year">Year:</label>
+                    <select id="history-year">
+                        <option value="all">All Years</option>
+                        <option value="2025">2025</option>
+                        <option value="2024">2024</option>
+                        <option value="2023">2023</option>
+                        <option value="2022">2022</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="history-region">Region:</label>
+                    <select id="history-region">
+                        <option value="all">Worldwide</option>
+                        <option value="na">North America</option>
+                        <option value="sa">South America</option>
+                        <option value="eu">Europe</option>
+                        <option value="as">Asia</option>
+                        <option value="af">Africa</option>
+                        <option value="oc">Oceania</option>
+                    </select>
+                </div>
+                <button id="apply-history-filters">Apply Filters</button>
+            </div>
+        </div>
+        
+        <div class="history-charts">
+            <div class="chart-container">
+                <h3>Disasters by Type</h3>
+                <div id="type-chart" class="chart-placeholder">
+                    <p>Chart will appear here</p>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <h3>Disasters by Month</h3>
+                <div id="month-chart" class="chart-placeholder">
+                    <p>Chart will appear here</p>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <h3>Severity Distribution</h3>
+                <div id="severity-chart" class="chart-placeholder">
+                    <p>Chart will appear here</p>
+                </div>
+            </div>
+            
+            <div class="chart-container wide">
+                <h3>Geographic Distribution</h3>
+                <div id="geo-chart" class="chart-placeholder">
+                    <p>Map will appear here</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="data-download">
+            <h3>Download Historical Data</h3>
+            <p>Download data for research or analysis</p>
+            <div class="download-buttons">
+                <button id="download-csv">CSV</button>
+                <button id="download-json">JSON</button>
+                <button id="download-xlsx">Excel</button>
+            </div>
+        </div>
+    </section>
+{% endblock %}
+
+{% block scripts %}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Simulate loading data and creating charts
+            setTimeout(function() {
+                createTypeChart();
+                createMonthChart();
+                createSeverityChart();
+                initGeoChart();
+            }, 500);
+            
+            // Set up download buttons
+            document.getElementById('download-csv').addEventListener('click', function() {
+                alert('In a real implementation, this would download a CSV file');
+            });
+            
+            document.getElementById('download-json').addEventListener('click', function() {
+                alert('In a real implementation, this would download a JSON file');
+            });
+            
+            document.getElementById('download-xlsx').addEventListener('click', function() {
+                alert('In a real implementation, this would download an Excel file');
+            });
+            
+            // Filter button
+            document.getElementById('apply-history-filters').addEventListener('click', function() {
+                // In a real app, this would reload the data and update the charts
+                alert('Filters applied! Charts would update in the real application.');
+            });
+        });
+        
+        function createTypeChart() {
+            const ctx = document.getElementById('type-chart');
+            ctx.innerHTML = '';
+            
+            const canvas = document.createElement('canvas');
+            ctx.appendChild(canvas);
+            
+            new Chart(canvas, {
+                type: 'pie',
+                data: {
+                    labels: ['Earthquakes', 'Floods', 'Wildfires', 'Storms', 'Other'],
+                    datasets: [{
+                        data: [25, 18, 15, 22, 7],
+                        backgroundColor: [
+                            '#FF6384',
+                            '#36A2EB',
+                            '#FFCE56',
+                            '#4BC0C0',
+                            '#9966FF'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                        }
+                    }
+                }
+            });
+        }
+        
+        function createMonthChart() {
+            const ctx = document.getElementById('month-chart');
+            ctx.innerHTML = '';
+            
+            const canvas = document.createElement('canvas');
+            ctx.appendChild(canvas);
+            
+            new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+                    datasets: [{
+                        label: 'Number of Disasters',
+                        data: [5, 7, 9, 12, 15, 18, 22, 25, 18, 12, 8, 6],
+                        backgroundColor: '#36A2EB'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+        
+        function createSeverityChart() {
+            const ctx = document.getElementById('severity-chart');
+            ctx.innerHTML = '';
+            
+            const canvas = document.createElement('canvas');
+            ctx.appendChild(canvas);
+            
+            new Chart(canvas, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Level 1', 'Level 2', 'Level 3', 'Level 4', 'Level 5'],
+                    datasets: [{
+                        data: [30, 25, 20, 15, 10],
+                        backgroundColor: [
+                            '#C5E8B7',
+                            '#ABE098',
+                            '#83CE87',
+                            '#57BB59',
+                            '#009900'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true
+                }
+            });
+        }
+        
+        function initGeoChart() {
+            const container = document.getElementById('geo-chart');
+            container.innerHTML = 'In a real implementation, this would show a heatmap of disaster locations.';
+        }
+    </script>
+{% endblock %}

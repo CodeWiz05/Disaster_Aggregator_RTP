@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Disaster Aggregator{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <h1>DisasterTrack</h1>
+        </div>
+        <nav>
+            <ul>
+                <li><a href="{{ url_for('main.index') }}">Home</a></li>
+                <li><a href="{{ url_for('main.report') }}">Report Disaster</a></li>
+                <li><a href="{{ url_for('main.history') }}">Historical Data</a></li>
+                <li><a href="{{ url_for('main.verify') }}">Verify Reports</a></li>
+            </ul>
+        </nav>
+    </header>
+    
+    <div class="flash-messages">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>
+    
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+    
+    <footer>
+        <p>&copy; 2025 DisasterTrack. Real-time disaster monitoring and reporting.</p>
+    </footer>
+    
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
+
+# disaster-aggregator/templates/index.html
+{% extends "base.html" %}
+
+{% block title %}DisasterTrack - Live Disaster Monitoring{% endblock %}
+
+{% block extra_head %}
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+{% endblock %}
+
+{% block content %}
+    <section class="hero">
+        <h2>Real-time Disaster Monitoring</h2>
+        <p>Track, report, and stay informed about disasters worldwide</p>
+    </section>
+    
+    <section class="map-container">
+        <div id="disaster-map"></div>
+        <div class="map-controls">
+            <div class="filter-controls">
+                <h3>Filters</h3>
+                <div>
+                    <label for="filter-type">Disaster Type:</label>
+                    <select id="filter-type">
+                        <option value="all">All Types</option>
+                        <option value="earthquake">Earthquakes</option>
+                        <option value="flood">Floods</option>
+                        <option value="wildfire">Wildfires</option>
+                        <option value="storm">Storms</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="filter-severity">Min Severity:</label>
+                    <select id="filter-severity">
+                        <option value="1">Any Severity</option>
+                        <option value="2">Moderate (2+)</option>
+                        <option value="3">Significant (3+)</option>
+                        <option value="4">Severe (4+)</option>
+                        <option value="5">Extreme (5)</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="filter-days">Time Range:</label>
+                    <select id="filter-days">
+                        <option value="1">Last 24 Hours</option>
+                        <option value="7" selected>Last 7 Days</option>
+                        <option value="30">Last 30 Days</option>
+                        <option value="365">Last Year</option>
+                    </select>
+                </div>
+                <button id="apply-filters">Apply Filters</button>
+            </div>
+        </div>
+    </section>
+    
+    <section class="disaster-list">
+        <h3>Recent Disasters</h3>
+        <div class="disaster-table-container">
+            <table id="disaster-table">
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Title</th>
+                        <th>Location</th>
+                        <th>Severity</th>
+                        <th>Time</th>
+                        <th>Source</th>
+                    </tr>
+                </thead>
+                <tbody id="disaster-rows">
+                    <!-- Disaster data will be populated here by JavaScript -->
+                    <tr>
+                        <td colspan="6">Loading disaster data...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+    
+    <section class="alert-signup">
+        <h3>Sign Up for Alerts</h3>
+        <p>Get notified when disasters happen in your area</p>
+        <form id="alert-form">
+            <div>
+                <label for="alert-email">Email:</label>
+                <input type="email" id="alert-email" placeholder="Your email address">
+            </div>
+            <div>
+                <label for="alert-phone">Phone (for SMS):</label>
+                <input type="tel" id="alert-phone" placeholder="Your phone number (optional)">
+            </div>
+            <div>
+                <label for="alert-location">Location:</label>
+                <input type="text" id="alert-location" placeholder="City, Country">
+            </div>
+            <div>
+                <label for="alert-radius">Alert Radius:</label>
+                <select id="alert-radius">
+                    <option value="50">50 km</option>
+                    <option value="100">100 km</option>
+                    <option value="200">200 km</option>
+                    <option value="500">500 km</option>
+                </select>
+            </div>
+            <button type="submit">Subscribe</button>
+        </form>
+    </section>
+{% endblock %}
+
+{% block scripts %}
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="{{ url_for('static', filename='js/map.js') }}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize map and load disaster data
+            initMap();
+            loadDisasterData();
+            
+            // Set up filters
+            document.getElementById('apply-filters').addEventListener('click', function() {
+                loadDisasterData();
+            });
+            
+            // Set up alert form
+            document.getElementById('alert-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                alert('Alert subscription feature will be implemented soon!');
+            });
+        });
+    </script>
+{% endblock %}

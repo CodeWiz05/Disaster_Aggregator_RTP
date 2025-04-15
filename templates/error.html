@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}Error{% endblock %}
+
+{% block content %}
+    <section class="error-page">
+        <div class="error-content">
+            <h2>{{ error_code }} Error</h2>
+            <h3>{{ error_message }}</h3>
+            <p>{{ error_description }}</p>
+            
+            <div class="error-actions">
+                <a href="{{ url_for('main.index') }}" class="btn">Go to Homepage</a>
+                <button onclick="window.history.back()" class="btn btn-secondary">Go Back</button>
+            </div>
+        </div>
+    </section>
+{% endblock %}

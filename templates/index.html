@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Disaster Aggregator - Real-time Disaster Monitoring{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <h1 class="section-title">Real-time Disaster Monitoring</h1>
+    <p>Stay informed about natural disasters and emergencies happening around the world.</p>
+</section>
+
+<section class="filters-container">
+    <h2 class="filters-title">Filter Disasters</h2>
+    <div class="filters-form">
+        <div class="form-group">
+            <label for="filter-type">Disaster Type</label>
+            <select id="filter-type" class="form-control">
+                <option value="all">All Types</option>
+                <option value="earthquake">Earthquakes</option>
+                <option value="flood">Floods</option>
+                <option value="wildfire">Wildfires</option>
+                <option value="storm">Storms</option>
+                <option value="landslide">Landslides</option>
+                <option value="other">Other</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="filter-severity">Min Severity</label>
+            <select id="filter-severity" class="form-control">
+                <option value="1">Any (1+)</option>
+                <option value="2">Moderate (2+)</option>
+                <option value="3">Significant (3+)</option>
+                <option value="4">Severe (4+)</option>
+                <option value="5">Extreme (5)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="filter-days">Time Period</label>
+            <select id="filter-days" class="form-control">
+                <option value="1">Last 24 hours</option>
+                <option value="7" selected>Last 7 days</option>
+                <option value="30">Last 30 days</option>
+                <option value="90">Last 90 days</option>
+                <option value="0">All time</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="filter-region">Region</label>
+            <select id="filter-region" class="form-control">
+                <option value="all">Worldwide</option>
+                <option value="americas">Americas</option>
+                <option value="europe">Europe</option>
+                <option value="asia">Asia</option>
+                <option value="africa">Africa</option>
+                <option value="oceania">Oceania</option>
+            </select>
+        </div>
+    </div>
+</section>
+
+<section>
+    <div class="map-container">
+        <div id="disaster-map"></div>
+    </div>
+</section>
+
+<section>
+    <h2 class="section-title">Recent Disasters</h2>
+    <div class="data-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Type</th>
+                    <th>Severity</th>
+                    <th>Time</th>
+                    <th>Location</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="disaster-rows">
+                <tr>
+                    <td colspan="6">Loading disaster data...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="stats-section">
+    <h2 class="section-title">Disaster Statistics</h2>
+    <div class="stats-container">
+        <div class="stats-row">
+            <div class="stat-box">
+                <h3>Total Active</h3>
+                <div class="stat-value" id="stat-total">--</div>
+            </div>
+            <div class="stat-box">
+                <h3>Most Common</h3>
+                <div class="stat-value" id="stat-common">--</div>
+            </div>
+            <div class="stat-box">
+                <h3>Highest Severity</h3>
+                <div class="stat-value" id="stat-severe">--</div>
+            </div>
+            <div class="stat-box">
+                <h3>Last 24 Hours</h3>
+                <div class="stat-value" id="stat-new">--</div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/map.js') }}"></script>
+{% endblock %}
