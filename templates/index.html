@@ -1,116 +1,671 @@
 {% extends "base.html" %}
 
-{% block title %}Disaster Aggregator - Real-time Disaster Monitoring{% endblock %}
+{% block title %}DisasterTrack - Real-time Disaster Monitoring{% endblock %}
+
+{% block extra_head %}
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.3/leaflet.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" />
+{% endblock %}
 
 {% block content %}
-<section class="hero">
-    <h1 class="section-title">Real-time Disaster Monitoring</h1>
-    <p>Stay informed about natural disasters and emergencies happening around the world.</p>
+<section class="hero-section">
+    <div class="container">
+        <div class="hero-content">
+            <h1 class="hero-title">Real-time Disaster Monitoring</h1>
+            <p class="hero-description">Stay informed about natural disasters and emergencies happening around the world with our comprehensive tracking platform.</p>
+            <div class="hero-buttons">
+                <a href="#disaster-map-section" class="btn btn-primary">View Map</a>
+                <a href="{{ url_for('main.report') }}" class="btn btn-secondary">Report Event</a>
+            </div>
+        </div>
+    </div>
+    <div class="hero-background">
+        <div class="hero-overlay"></div>
+    </div>
 </section>
 
-<section class="filters-container">
-    <h2 class="filters-title">Filter Disasters</h2>
-    <div class="filters-form">
-        <div class="form-group">
-            <label for="filter-type">Disaster Type</label>
-            <select id="filter-type" class="form-control">
-                <option value="all">All Types</option>
-                <option value="earthquake">Earthquakes</option>
-                <option value="flood">Floods</option>
-                <option value="wildfire">Wildfires</option>
-                <option value="storm">Storms</option>
-                <option value="landslide">Landslides</option>
-                <option value="other">Other</option>
-            </select>
+<section class="filters-section">
+    <div class="container">
+        <div class="section-header">
+            <h2 class="section-title"><i class="fas fa-filter"></i> Filter Disasters</h2>
+            <button class="btn btn-sm btn-outline" id="toggle-filters">Show/Hide Filters</button>
         </div>
-        <div class="form-group">
-            <label for="filter-severity">Min Severity</label>
-            <select id="filter-severity" class="form-control">
-                <option value="1">Any (1+)</option>
-                <option value="2">Moderate (2+)</option>
-                <option value="3">Significant (3+)</option>
-                <option value="4">Severe (4+)</option>
-                <option value="5">Extreme (5)</option>
-            </select>
-        </div>
-        <div class="form-group">
-            <label for="filter-days">Time Period</label>
-            <select id="filter-days" class="form-control">
-                <option value="1">Last 24 hours</option>
-                <option value="7" selected>Last 7 days</option>
-                <option value="30">Last 30 days</option>
-                <option value="90">Last 90 days</option>
-                <option value="0">All time</option>
-            </select>
-        </div>
-        <div class="form-group">
-            <label for="filter-region">Region</label>
-            <select id="filter-region" class="form-control">
-                <option value="all">Worldwide</option>
-                <option value="americas">Americas</option>
-                <option value="europe">Europe</option>
-                <option value="asia">Asia</option>
-                <option value="africa">Africa</option>
-                <option value="oceania">Oceania</option>
-            </select>
+        
+        <div class="filters-panel">
+            <div class="filters-grid">
+                <div class="filter-group">
+                    <label for="filter-type">
+                        <i class="fas fa-tag"></i> Disaster Type
+                    </label>
+                    <select id="filter-type" class="form-control">
+                        <option value="all">All Types</option>
+                        <option value="earthquake">Earthquakes</option>
+                        <option value="flood">Floods</option>
+                        <option value="wildfire">Wildfires</option>
+                        <option value="storm">Storms</option>
+                        <option value="landslide">Landslides</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="filter-severity">
+                        <i class="fas fa-exclamation-circle"></i> Min Severity
+                    </label>
+                    <select id="filter-severity" class="form-control">
+                        <option value="1">Any (1+)</option>
+                        <option value="2">Moderate (2+)</option>
+                        <option value="3">Significant (3+)</option>
+                        <option value="4">Severe (4+)</option>
+                        <option value="5">Extreme (5)</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="filter-days">
+                        <i class="far fa-calendar-alt"></i> Time Period
+                    </label>
+                    <select id="filter-days" class="form-control">
+                        <option value="1">Last 24 hours</option>
+                        <option value="7" selected>Last 7 days</option>
+                        <option value="30">Last 30 days</option>
+                        <option value="90">Last 90 days</option>
+                        <option value="0">All time</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="filter-region">
+                        <i class="fas fa-globe"></i> Region
+                    </label>
+                    <select id="filter-region" class="form-control">
+                        <option value="all">Worldwide</option>
+                        <option value="americas">Americas</option>
+                        <option value="europe">Europe</option>
+                        <option value="asia">Asia</option>
+                        <option value="africa">Africa</option>
+                        <option value="oceania">Oceania</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="filters-actions">
+                <button id="apply-filters" class="btn btn-primary"><i class="fas fa-search"></i> Apply Filters</button>
+                <button id="reset-filters" class="btn btn-text"><i class="fas fa-undo"></i> Reset</button>
+            </div>
         </div>
     </div>
 </section>
 
-<section>
-    <div class="map-container">
-        <div id="disaster-map"></div>
+<section class="map-section" id="disaster-map-section">
+    <div class="container">
+        <div class="section-header">
+            <h2 class="section-title"><i class="fas fa-map-marked-alt"></i> Disaster Map</h2>
+            <div class="map-controls">
+                <button class="btn btn-sm btn-icon" id="zoom-in" title="Zoom in"><i class="fas fa-plus"></i></button>
+                <button class="btn btn-sm btn-icon" id="zoom-out" title="Zoom out"><i class="fas fa-minus"></i></button>
+                <button class="btn btn-sm btn-icon" id="reset-view" title="Reset view"><i class="fas fa-crosshairs"></i></button>
+            </div>
+        </div>
+        
+        <div class="map-container">
+            <div id="disaster-map"></div>
+            <div class="map-legend">
+                <h4>Legend</h4>
+                <ul>
+                    <li><span class="legend-marker earthquake"></span> Earthquake</li>
+                    <li><span class="legend-marker flood"></span> Flood</li>
+                    <li><span class="legend-marker wildfire"></span> Wildfire</li>
+                    <li><span class="legend-marker storm"></span> Storm</li>
+                    <li><span class="legend-marker landslide"></span> Landslide</li>
+                </ul>
+            </div>
+        </div>
     </div>
 </section>
 
-<section>
-    <h2 class="section-title">Recent Disasters</h2>
-    <div class="data-container">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Title</th>
-                    <th>Type</th>
-                    <th>Severity</th>
-                    <th>Time</th>
-                    <th>Location</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody id="disaster-rows">
-                <tr>
-                    <td colspan="6">Loading disaster data...</td>
-                </tr>
-            </tbody>
-        </table>
+<section class="disasters-section">
+    <div class="container">
+        <div class="section-header">
+            <h2 class="section-title"><i class="fas fa-list"></i> Recent Disasters</h2>
+            <div class="view-controls">
+                <button class="btn btn-sm btn-icon active" id="table-view" title="Table view"><i class="fas fa-table"></i></button>
+                <button class="btn btn-sm btn-icon" id="card-view" title="Card view"><i class="fas fa-th-large"></i></button>
+            </div>
+        </div>
+        
+        <div class="data-wrapper table-view">
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th class="sortable" data-sort="title">Title <i class="fas fa-sort"></i></th>
+                            <th class="sortable" data-sort="type">Type <i class="fas fa-sort"></i></th>
+                            <th class="sortable" data-sort="severity">Severity <i class="fas fa-sort"></i></th>
+                            <th class="sortable" data-sort="time">Time <i class="fas fa-sort"></i></th>
+                            <th class="sortable" data-sort="location">Location <i class="fas fa-sort"></i></th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="disaster-rows">
+                        <tr class="loading-row">
+                            <td colspan="6">
+                                <div class="loading-spinner"></div>
+                                <p>Loading disaster data...</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="card-grid" id="disaster-cards" style="display: none;">
+                <!-- Cards will be populated by JavaScript -->
+                <div class="loading-overlay">
+                    <div class="loading-spinner"></div>
+                    <p>Loading disaster data...</p>
+                </div>
+            </div>
+            
+            <div class="pagination-controls">
+                <button id="prev-page" class="btn btn-sm btn-icon" disabled><i class="fas fa-chevron-left"></i></button>
+                <span id="page-info">Page 1 of 1</span>
+                <button id="next-page" class="btn btn-sm btn-icon" disabled><i class="fas fa-chevron-right"></i></button>
+            </div>
+        </div>
     </div>
 </section>
 
 <section class="stats-section">
-    <h2 class="section-title">Disaster Statistics</h2>
-    <div class="stats-container">
-        <div class="stats-row">
-            <div class="stat-box">
-                <h3>Total Active</h3>
-                <div class="stat-value" id="stat-total">--</div>
+    <div class="container">
+        <h2 class="section-title"><i class="fas fa-chart-pie"></i> Disaster Statistics</h2>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <div class="stat-content">
+                    <h3>Total Active</h3>
+                    <div class="stat-value" id="stat-total">--</div>
+                </div>
             </div>
-            <div class="stat-box">
-                <h3>Most Common</h3>
-                <div class="stat-value" id="stat-common">--</div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="fas fa-fire"></i>
+                </div>
+                <div class="stat-content">
+                    <h3>Most Common</h3>
+                    <div class="stat-value" id="stat-common">--</div>
+                </div>
             </div>
-            <div class="stat-box">
-                <h3>Highest Severity</h3>
-                <div class="stat-value" id="stat-severe">--</div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="fas fa-radiation"></i>
+                </div>
+                <div class="stat-content">
+                    <h3>Highest Severity</h3>
+                    <div class="stat-value" id="stat-severe">--</div>
+                </div>
             </div>
-            <div class="stat-box">
-                <h3>Last 24 Hours</h3>
-                <div class="stat-value" id="stat-new">--</div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="fas fa-clock"></i>
+                </div>
+                <div class="stat-content">
+                    <h3>Last 24 Hours</h3>
+                    <div class="stat-value" id="stat-new">--</div>
+                </div>
             </div>
         </div>
     </div>
 </section>
 {% endblock %}
 
-{% block extra_js %}
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.3/leaflet.js"></script>
 <script src="{{ url_for('static', filename='js/map.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize map
+        let map;
+        let currentPage = 1;
+        let totalPages = 1;
+        let disasterData = [];
+        let currentFilters = {
+            type: 'all',
+            severity: '1',
+            days: '7',
+            region: 'all'
+        };
+        
+        // Initialize map if the map element exists
+        const mapElement = document.getElementById('disaster-map');
+        if (mapElement) {
+            map = L.map('disaster-map').setView([20, 0], 2);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+            
+            // Map controls
+            document.getElementById('zoom-in').addEventListener('click', function() {
+                map.zoomIn();
+            });
+            
+            document.getElementById('zoom-out').addEventListener('click', function() {
+                map.zoomOut();
+            });
+            
+            document.getElementById('reset-view').addEventListener('click', function() {
+                map.setView([20, 0], 2);
+            });
+        }
+        
+        // Toggle filters panel with proper class handling
+        const filtersPanel = document.querySelector('.filters-panel');
+        document.getElementById('toggle-filters').addEventListener('click', function() {
+            if (filtersPanel.classList.contains('hidden')) {
+                filtersPanel.classList.remove('hidden');
+            } else {
+                filtersPanel.classList.add('hidden');
+            }
+        });
+        
+        // Toggle view (table/card)
+        document.getElementById('table-view').addEventListener('click', function() {
+            document.getElementById('table-view').classList.add('active');
+            document.getElementById('card-view').classList.remove('active');
+            document.querySelector('.data-wrapper').classList.add('table-view');
+            document.querySelector('.data-wrapper').classList.remove('card-view');
+            document.querySelector('.table-responsive').style.display = 'block';
+            document.getElementById('disaster-cards').style.display = 'none';
+        });
+        
+        document.getElementById('card-view').addEventListener('click', function() {
+            document.getElementById('card-view').classList.add('active');
+            document.getElementById('table-view').classList.remove('active');
+            document.querySelector('.data-wrapper').classList.add('card-view');
+            document.querySelector('.data-wrapper').classList.remove('table-view');
+            document.querySelector('.table-responsive').style.display = 'none';
+            document.getElementById('disaster-cards').style.display = 'grid';
+        });
+        
+        // Filter event listeners
+        document.getElementById('apply-filters').addEventListener('click', function() {
+            currentFilters = {
+                type: document.getElementById('filter-type').value,
+                severity: document.getElementById('filter-severity').value,
+                days: document.getElementById('filter-days').value,
+                region: document.getElementById('filter-region').value
+            };
+            currentPage = 1;
+            loadDisasterData();
+        });
+        
+        document.getElementById('reset-filters').addEventListener('click', function() {
+            document.getElementById('filter-type').value = 'all';
+            document.getElementById('filter-severity').value = '1';
+            document.getElementById('filter-days').value = '7';
+            document.getElementById('filter-region').value = 'all';
+            
+            currentFilters = {
+                type: 'all',
+                severity: '1',
+                days: '7',
+                region: 'all'
+            };
+            currentPage = 1;
+            loadDisasterData();
+        });
+        
+        // Pagination controls
+        document.getElementById('prev-page').addEventListener('click', function() {
+            if (currentPage > 1) {
+                currentPage--;
+                updateDisasterTable();
+                updatePaginationControls();
+            }
+        });
+        
+        document.getElementById('next-page').addEventListener('click', function() {
+            if (currentPage < totalPages) {
+                currentPage++;
+                updateDisasterTable();
+                updatePaginationControls();
+            }
+        });
+        
+        // Sortable columns
+        document.querySelectorAll('th.sortable').forEach(header => {
+            header.addEventListener('click', function() {
+                const sort = this.dataset.sort;
+                const icon = this.querySelector('i');
+                
+                // Reset other icons
+                document.querySelectorAll('th.sortable i').forEach(i => {
+                    i.className = 'fas fa-sort';
+                });
+                
+                // Set this icon based on sort direction
+                if (icon.classList.contains('fa-sort') || icon.classList.contains('fa-sort-down')) {
+                    icon.className = 'fas fa-sort-up';
+                    sortData(sort, 'asc');
+                } else {
+                    icon.className = 'fas fa-sort-down';
+                    sortData(sort, 'desc');
+                }
+            });
+        });
+        
+        // Sort data function
+        function sortData(field, direction) {
+            disasterData.sort((a, b) => {
+                let comparison = 0;
+                
+                switch(field) {
+                    case 'title':
+                        comparison = a.title.localeCompare(b.title);
+                        break;
+                    case 'type':
+                        comparison = a.type.localeCompare(b.type);
+                        break;
+                    case 'severity':
+                        comparison = a.severity - b.severity;
+                        break;
+                    case 'time':
+                        comparison = new Date(a.time) - new Date(b.time);
+                        break;
+                    case 'location':
+                        comparison = a.location.localeCompare(b.location);
+                        break;
+                }
+                
+                return direction === 'asc' ? comparison : -comparison;
+            });
+            
+            updateDisasterTable();
+        }
+        
+        // Load disaster data from API
+        function loadDisasterData() {
+            // In a real app, this would fetch data from an API
+            // For now, we'll simulate a delay and use placeholder data
+            
+            document.querySelector('.loading-row').style.display = 'table-row';
+            document.querySelector('.loading-overlay').style.display = 'flex';
+            
+            setTimeout(() => {
+                // Placeholder data
+                disasterData = [
+                    {
+                        id: 1,
+                        title: 'Coastal Flooding',
+                        type: 'flood',
+                        severity: 3,
+                        time: '2025-04-14T18:30:00',
+                        location: 'Miami, Florida, USA',
+                        lat: 25.7617,
+                        lng: -80.1918,
+                        description: 'Coastal flooding affecting several neighborhoods'
+                    },
+                    {
+                        id: 2,
+                        title: 'Forest Fire',
+                        type: 'wildfire',
+                        severity: 4,
+                        time: '2025-04-13T10:15:00',
+                        location: 'Northern California, USA',
+                        lat: 40.5865,
+                        lng: -122.3917,
+                        description: 'Large wildfire spreading in forest areas'
+                    },
+                    {
+                        id: 3,
+                        title: 'Magnitude 5.2 Earthquake',
+                        type: 'earthquake',
+                        severity: 3,
+                        time: '2025-04-12T23:45:00',
+                        location: 'Tokyo, Japan',
+                        lat: 35.6762,
+                        lng: 139.6503,
+                        description: 'Moderate earthquake with some structural damage reported'
+                    }
+                ];
+                
+                // Filter data based on current filters (in real app)
+                // ...
+                
+                totalPages = Math.ceil(disasterData.length / 10) || 1;
+                updateDisasterTable();
+                updatePaginationControls();
+                updateStatistics();
+                updateMap();
+                
+                document.querySelector('.loading-row').style.display = 'none';
+                document.querySelector('.loading-overlay').style.display = 'none';
+            }, 800);
+        }
+        
+        // Update disaster table with data
+        function updateDisasterTable() {
+            const tableBody = document.getElementById('disaster-rows');
+            const cardsContainer = document.getElementById('disaster-cards');
+            
+            // Clear existing content
+            while (tableBody.firstChild) {
+                if (tableBody.firstChild.classList && tableBody.firstChild.classList.contains('loading-row')) {
+                    break;
+                }
+                tableBody.removeChild(tableBody.firstChild);
+            }
+            
+            // Remove all cards except loading overlay
+            while (cardsContainer.firstChild) {
+                if (cardsContainer.firstChild.classList && cardsContainer.firstChild.classList.contains('loading-overlay')) {
+                    break;
+                }
+                cardsContainer.removeChild(cardsContainer.firstChild);
+            }
+            
+            // Calculate slice for pagination
+            const startIndex = (currentPage - 1) * 10;
+            const endIndex = startIndex + 10;
+            const pageData = disasterData.slice(startIndex, endIndex);
+            
+            // Add new rows and cards
+            pageData.forEach(disaster => {
+                // Create table row
+                const row = document.createElement('tr');
+                
+                const severityClass = `severity-${disaster.severity}`;
+                const typeClass = disaster.type;
+                
+                row.innerHTML = `
+                    <td>${disaster.title}</td>
+                    <td><span class="badge ${typeClass}">${disaster.type.charAt(0).toUpperCase() + disaster.type.slice(1)}</span></td>
+                    <td><span class="severity-indicator ${severityClass}">${disaster.severity}</span></td>
+                    <td>${formatDate(disaster.time)}</td>
+                    <td>${disaster.location}</td>
+                    <td class="actions-cell">
+                        <button class="btn btn-sm btn-icon view-details" data-id="${disaster.id}" title="View details">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button class="btn btn-sm btn-icon share-event" data-id="${disaster.id}" title="Share">
+                            <i class="fas fa-share-alt"></i>
+                        </button>
+                    </td>
+                `;
+                
+                // Insert before loading row
+                if (tableBody.querySelector('.loading-row')) {
+                    tableBody.insertBefore(row, tableBody.querySelector('.loading-row'));
+                } else {
+                    tableBody.appendChild(row);
+                }
+                
+                // Create card
+                const card = document.createElement('div');
+                card.className = 'disaster-card';
+                card.innerHTML = `
+                    <div class="card-header ${typeClass}">
+                        <h3>${disaster.title}</h3>
+                        <span class="severity-indicator ${severityClass}">${disaster.severity}</span>
+                    </div>
+                    <div class="card-body">
+                        <p><i class="fas fa-map-marker-alt"></i> ${disaster.location}</p>
+                        <p><i class="far fa-clock"></i> ${formatDate(disaster.time)}</p>
+                        <p class="card-description">${disaster.description}</p>
+                    </div>
+                    <div class="card-footer">
+                        <button class="btn btn-sm view-details" data-id="${disaster.id}">
+                            <i class="fas fa-eye"></i> Details
+                        </button>
+                        <button class="btn btn-sm btn-icon share-event" data-id="${disaster.id}">
+                            <i class="fas fa-share-alt"></i>
+                        </button>
+                    </div>
+                `;
+                
+                // Insert before loading overlay
+                if (cardsContainer.querySelector('.loading-overlay')) {
+                    cardsContainer.insertBefore(card, cardsContainer.querySelector('.loading-overlay'));
+                } else {
+                    cardsContainer.appendChild(card);
+                }
+            });
+            
+            // Add event listeners to buttons
+            document.querySelectorAll('.view-details').forEach(button => {
+                button.addEventListener('click', function() {
+                    const id = this.getAttribute('data-id');
+                    viewDisasterDetails(id);
+                });
+            });
+            
+            document.querySelectorAll('.share-event').forEach(button => {
+                button.addEventListener('click', function() {
+                    const id = this.getAttribute('data-id');
+                    shareDisaster(id);
+                });
+            });
+        }
+        
+        // Update pagination controls
+        function updatePaginationControls() {
+            document.getElementById('page-info').textContent = `Page ${currentPage} of ${totalPages}`;
+            document.getElementById('prev-page').disabled = currentPage <= 1;
+            document.getElementById('next-page').disabled = currentPage >= totalPages;
+        }
+        
+        // Update map with markers
+        function updateMap() {
+            if (!map) return;
+            
+            // Clear existing markers
+            map.eachLayer(layer => {
+                if (layer instanceof L.Marker) {
+                    map.removeLayer(layer);
+                }
+            });
+            
+            // Add markers for each disaster
+            disasterData.forEach(disaster => {
+                const markerIcon = L.divIcon({
+                    className: `map-marker ${disaster.type}`,
+                    html: `<span>${disaster.severity}</span>`,
+                    iconSize: [30, 30]
+                });
+                
+                const marker = L.marker([disaster.lat, disaster.lng], { icon: markerIcon })
+                    .addTo(map)
+                    .bindPopup(`
+                        <div class="map-popup">
+                            <h4>${disaster.title}</h4>
+                            <p>${disaster.location}</p>
+                            <p>${formatDate(disaster.time)}</p>
+                            <button class="btn btn-sm popup-details" data-id="${disaster.id}">Details</button>
+                        </div>
+                    `);
+                
+                marker.on('popupopen', function() {
+                    const detailsBtn = document.querySelector(`.popup-details[data-id="${disaster.id}"]`);
+                    if (detailsBtn) {
+                        detailsBtn.addEventListener('click', function() {
+                            viewDisasterDetails(disaster.id);
+                        });
+                    }
+                });
+            });
+        }
+        
+        // Update statistics
+        function updateStatistics() {
+            document.getElementById('stat-total').textContent = disasterData.length;
+            
+            // Calculate most common type
+            const typeCounts = {};
+            disasterData.forEach(disaster => {
+                typeCounts[disaster.type] = (typeCounts[disaster.type] || 0) + 1;
+            });
+            
+            let mostCommonType = 'None';
+            let maxCount = 0;
+            
+            for (const type in typeCounts) {
+                if (typeCounts[type] > maxCount) {
+                    maxCount = typeCounts[type];
+                    mostCommonType = type.charAt(0).toUpperCase() + type.slice(1);
+                }
+            }
+            
+            document.getElementById('stat-common').textContent = mostCommonType;
+            
+            // Calculate highest severity
+            let highestSeverity = disasterData.reduce((max, disaster) => 
+                Math.max(max, disaster.severity), 0);
+            
+            document.getElementById('stat-severe').textContent = highestSeverity || 'N/A';
+            
+            // Calculate events in last 24 hours
+            const oneDayAgo = new Date();
+            oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+            
+            const recentEvents = disasterData.filter(disaster => 
+                new Date(disaster.time) >= oneDayAgo
+            ).length;
+            
+            document.getElementById('stat-new').textContent = recentEvents;
+        }
+        
+        // View disaster details function
+        function viewDisasterDetails(id) {
+            // In a real app, this would open a modal or navigate to a detail page
+            console.log(`Viewing details for disaster ID: ${id}`);
+            const disaster = disasterData.find(d => d.id == id);
+            
+            if (disaster) {
+                alert(`Disaster Details: ${disaster.title}\nLocation: ${disaster.location}\nType: ${disaster.type}\nSeverity: ${disaster.severity}\nTime: ${formatDate(disaster.time)}\nDescription: ${disaster.description}`);
+            }
+        }
+        
+        // Share disaster function
+        function shareDisaster(id) {
+            // In a real app, this would open a share dialog
+            console.log(`Sharing disaster ID: ${id}`);
+            alert(`Share functionality would be implemented here for disaster ID: ${id}`);
+        }
+        
+        // Format date helper function
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString();
+        }
+        
+        // Initial data load
+        loadDisasterData();
+    });
+</script>
 {% endblock %}

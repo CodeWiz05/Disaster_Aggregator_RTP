@@ -4,15 +4,107 @@
 
 {% block content %}
     <section class="error-page">
-        <div class="error-content">
-            <h2>{{ error_code }} Error</h2>
-            <h3>{{ error_message }}</h3>
-            <p>{{ error_description }}</p>
-            
-            <div class="error-actions">
-                <a href="{{ url_for('main.index') }}" class="btn">Go to Homepage</a>
-                <button onclick="window.history.back()" class="btn btn-secondary">Go Back</button>
+        <div class="error-container">
+            <div class="error-icon">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <div class="error-content">
+                <h1 class="error-title">{{ error_code }} Error</h1>
+                <h2 class="error-subtitle">{{ error_message }}</h2>
+                <p class="error-description">{{ error_description }}</p>
+                
+                <div class="error-actions">
+                    <a href="{{ url_for('main.index') }}" class="btn btn-primary">Return to Homepage</a>
+                    <button onclick="window.history.back()" class="btn btn-secondary">Go Back</button>
+                </div>
             </div>
         </div>
     </section>
+{% endblock %}
+
+{% block styles %}
+<style>
+    .error-page {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 70vh;
+        padding: 2rem;
+    }
+    
+    .error-container {
+        max-width: 600px;
+        background-color: #fff;
+        border-radius: 8px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        padding: 2.5rem;
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .error-icon {
+        font-size: 4rem;
+        color: #e74c3c;
+        margin-bottom: 1.5rem;
+    }
+    
+    .error-title {
+        font-size: 3rem;
+        font-weight: 700;
+        color: #e74c3c;
+        margin: 0 0 0.5rem;
+    }
+    
+    .error-subtitle {
+        font-size: 1.5rem;
+        font-weight: 500;
+        color: #34495e;
+        margin-bottom: 1rem;
+    }
+    
+    .error-description {
+        font-size: 1.1rem;
+        color: #7f8c8d;
+        margin-bottom: 2.5rem;
+        line-height: 1.6;
+    }
+    
+    .error-actions {
+        display: flex;
+        justify-content: center;
+        gap: 1rem;
+    }
+    
+    .btn {
+        display: inline-block;
+        padding: 0.8rem 1.5rem;
+        font-size: 1rem;
+        font-weight: 500;
+        text-decoration: none;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-primary {
+        background-color: #3498db;
+        color: white;
+        border: none;
+    }
+    
+    .btn-primary:hover {
+        background-color: #2980b9;
+    }
+    
+    .btn-secondary {
+        background-color: #ecf0f1;
+        color: #2c3e50;
+        border: 1px solid #bdc3c7;
+    }
+    
+    .btn-secondary:hover {
+        background-color: #dfe6e9;
+    }
+</style>
 {% endblock %}

@@ -2,77 +2,331 @@
 
 {% block title %}Report a Disaster{% endblock %}
 
+{% block styles %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css">
+<style>
+    .report-form-container {
+        max-width: 950px;
+        margin: 2rem auto;
+        padding: 2.5rem;
+        background-color: #fff;
+        border-radius: 10px;
+        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+    }
+    
+    .report-form-header {
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    
+    .report-form-header h2 {
+        font-size: 2.2rem;
+        color: #2c3e50;
+        margin-bottom: 0.5rem;
+    }
+    
+    .report-form-header p {
+        font-size: 1.1rem;
+        color: #7f8c8d;
+    }
+    
+    .form-section {
+        border-top: 1px solid #ecf0f1;
+        padding-top: 1.5rem;
+        margin-top: 1.5rem;
+    }
+    
+    .form-section-title {
+        font-size: 1.3rem;
+        font-weight: 600;
+        color: #2c3e50;
+        margin-bottom: 1rem;
+    }
+    
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+    
+    .form-group label {
+        display: block;
+        font-weight: 600;
+        font-size: 1rem;
+        color: #34495e;
+        margin-bottom: 0.5rem;
+    }
+    
+    .form-control {
+        display: block;
+        width: 100%;
+        padding: 0.8rem;
+        font-size: 1rem;
+        border: 1px solid #dfe6e9;
+        border-radius: 4px;
+        background-color: #fff;
+        transition: border-color 0.3s;
+    }
+    
+    .form-control:focus {
+        border-color: #3498db;
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.15);
+    }
+    
+    select.form-control {
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.8rem center;
+        padding-right: 2.5rem;
+    }
+    
+    textarea.form-control {
+        min-height: 120px;
+    }
+    
+    .form-row {
+        display: flex;
+        gap: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .form-col {
+        flex: 1;
+    }
+    
+    .map-picker {
+        margin-bottom: 2rem;
+    }
+    
+    #location-picker-map {
+        height: 350px;
+        border-radius: 6px;
+        margin-bottom: 0.5rem;
+    }
+    
+    .helper-text {
+        font-size: 0.85rem;
+        color: #7f8c8d;
+        margin-top: 0.5rem;
+    }
+    
+    .file-upload {
+        position: relative;
+        border: 2px dashed #dfe6e9;
+        border-radius: 6px;
+        padding: 2rem;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    
+    .file-upload:hover {
+        border-color: #3498db;
+    }
+    
+    .file-upload input[type="file"] {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        cursor: pointer;
+    }
+    
+    .file-upload-icon {
+        font-size: 2rem;
+        color: #7f8c8d;
+        margin-bottom: 1rem;
+    }
+    
+    .file-upload-text {
+        font-size: 1rem;
+        color: #34495e;
+    }
+    
+    .severity-selector {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .severity-option {
+        flex: 1;
+        padding: 0.8rem;
+        text-align: center;
+        border: 1px solid #dfe6e9;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    
+    .severity-option:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .severity-option.selected {
+        background-color: #3498db;
+        color: white;
+        border-color: #3498db;
+    }
+    
+    .severity-1 { border-left: 4px solid #27ae60; }
+    .severity-2 { border-left: 4px solid #2ecc71; }
+    .severity-3 { border-left: 4px solid #f39c12; }
+    .severity-4 { border-left: 4px solid #e67e22; }
+    .severity-5 { border-left: 4px solid #e74c3c; }
+    
+    .btn-submit {
+        background-color: #3498db;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 1rem 2rem;
+        font-size: 1.1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background-color 0.3s;
+        width: 100%;
+    }
+    
+    .btn-submit:hover {
+        background-color: #2980b9;
+    }
+    
+    .reporting-tips {
+        margin-top: 3rem;
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 1.5rem;
+    }
+    
+    .reporting-tips h3 {
+        font-size: 1.2rem;
+        color: #2c3e50;
+        margin-bottom: 1rem;
+    }
+    
+    .reporting-tips ul {
+        padding-left: 1.5rem;
+        margin: 0;
+    }
+    
+    .reporting-tips li {
+        margin-bottom: 0.5rem;
+        color: #34495e;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
     <section class="report-form-container">
-        <h2>Report a Disaster</h2>
-        <p>Help others by reporting disasters in your area. Verified reports will appear on our map.</p>
+        <div class="report-form-header">
+            <h2>Report a Disaster</h2>
+            <p>Help others by reporting disasters in your area. Verified reports will appear on our map.</p>
+        </div>
         
         <form id="disaster-report-form" method="post">
-            <div class="form-group">
-                <label for="disaster-type">Disaster Type:</label>
-                <select id="disaster-type" name="disaster_type" required>
-                    <option value="">Select Type</option>
-                    <option value="earthquake">Earthquake</option>
-                    <option value="flood">Flood</option>
-                    <option value="wildfire">Wildfire</option>
-                    <option value="storm">Storm</option>
-                    <option value="landslide">Landslide</option>
-                    <option value="other">Other</option>
-                </select>
+            <div class="form-section">
+                <h3 class="form-section-title">Disaster Information</h3>
+                
+                <div class="form-row">
+                    <div class="form-col">
+                        <div class="form-group">
+                            <label for="disaster-type">Disaster Type</label>
+                            <select id="disaster-type" name="disaster_type" class="form-control" required>
+                                <option value="">Select Type</option>
+                                <option value="earthquake">Earthquake</option>
+                                <option value="flood">Flood</option>
+                                <option value="wildfire">Wildfire</option>
+                                <option value="storm">Storm</option>
+                                <option value="landslide">Landslide</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-col">
+                        <div class="form-group">
+                            <label for="disaster-severity">Severity</label>
+                            <select id="disaster-severity" name="severity" class="form-control" required>
+                                <option value="1" class="severity-1">1 - Minor</option>
+                                <option value="2" class="severity-2">2 - Moderate</option>
+                                <option value="3" class="severity-3">3 - Significant</option>
+                                <option value="4" class="severity-4">4 - Severe</option>
+                                <option value="5" class="severity-5">5 - Extreme</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="disaster-title">Title</label>
+                    <input type="text" id="disaster-title" name="title" class="form-control" placeholder="Brief title of the disaster" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="disaster-description">Description</label>
+                    <textarea id="disaster-description" name="description" class="form-control" rows="4" placeholder="Provide details about what happened" required></textarea>
+                </div>
+            </div>
+            
+            <div class="form-section">
+                <h3 class="form-section-title">Location Details</h3>
+                
+                <div class="form-group">
+                    <label for="disaster-location">Location Address</label>
+                    <input type="text" id="disaster-location" name="location" class="form-control" placeholder="City, Country" required>
+                </div>
+                
+                <div class="form-group map-picker">
+                    <label>Pin Location on Map</label>
+                    <div id="location-picker-map"></div>
+                    <p class="helper-text">Click on the map to set the location or use the search box above</p>
+                    <input type="hidden" id="disaster-lat" name="latitude">
+                    <input type="hidden" id="disaster-lng" name="longitude">
+                </div>
+            </div>
+            
+            <div class="form-section">
+                <h3 class="form-section-title">Multimedia</h3>
+                
+                <div class="form-group">
+                    <label for="disaster-media">Photos/Videos (optional)</label>
+                    <div class="file-upload">
+                        <div class="file-upload-icon">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                        </div>
+                        <div class="file-upload-text">
+                            <span>Drop files here or click to upload</span>
+                            <p class="helper-text">Max file size: 10MB</p>
+                        </div>
+                        <input type="file" id="disaster-media" name="media" accept="image/*, video/*">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-section">
+                <h3 class="form-section-title">Your Contact Information</h3>
+                
+                <div class="form-row">
+                    <div class="form-col">
+                        <div class="form-group">
+                            <label for="reporter-email">Your Email</label>
+                            <input type="email" id="reporter-email" name="email" class="form-control" placeholder="For verification and updates" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-col">
+                        <div class="form-group">
+                            <label for="reporter-phone">Phone (optional)</label>
+                            <input type="tel" id="reporter-phone" name="phone" class="form-control" placeholder="If we need additional information">
+                        </div>
+                    </div>
+                </div>
             </div>
             
             <div class="form-group">
-                <label for="disaster-title">Title:</label>
-                <input type="text" id="disaster-title" name="title" placeholder="Brief title of the disaster" required>
-            </div>
-            
-            <div class="form-group">
-                <label for="disaster-description">Description:</label>
-                <textarea id="disaster-description" name="description" rows="4" placeholder="Provide details about what happened" required></textarea>
-            </div>
-            
-            <div class="form-group">
-                <label for="disaster-location">Location:</label>
-                <input type="text" id="disaster-location" name="location" placeholder="City, Country" required>
-            </div>
-            
-            <div class="form-group map-picker">
-                <label>Pin Location on Map:</label>
-                <div id="location-picker-map"></div>
-                <p class="helper-text">Click on the map to set the location or use the search box above</p>
-                <input type="hidden" id="disaster-lat" name="latitude">
-                <input type="hidden" id="disaster-lng" name="longitude">
-            </div>
-            
-            <div class="form-group">
-                <label for="disaster-severity">Severity (1-5):</label>
-                <select id="disaster-severity" name="severity" required>
-                    <option value="1">1 - Minor</option>
-                    <option value="2">2 - Moderate</option>
-                    <option value="3">3 - Significant</option>
-                    <option value="4">4 - Severe</option>
-                    <option value="5">5 - Extreme</option>
-                </select>
-            </div>
-            
-            <div class="form-group">
-                <label for="disaster-media">Photos/Videos (optional):</label>
-                <input type="file" id="disaster-media" name="media" accept="image/*, video/*">
-                <p class="helper-text">Max file size: 10MB</p>
-            </div>
-            
-            <div class="form-group">
-                <label for="reporter-email">Your Email:</label>
-                <input type="email" id="reporter-email" name="email" placeholder="For verification and updates" required>
-            </div>
-            
-            <div class="form-group">
-                <label for="reporter-phone">Phone (optional):</label>
-                <input type="tel" id="reporter-phone" name="phone" placeholder="If we need additional information">
-            </div>
-            
-            <div class="form-group">
-                <button type="submit">Submit Report</button>
+                <button type="submit" class="btn-submit">Submit Report</button>
             </div>
         </form>
         

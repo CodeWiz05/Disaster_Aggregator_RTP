@@ -2,10 +2,262 @@
 
 {% block title %}Verify Reports{% endblock %}
 
+{% block styles %}
+<style>
+    .verify-panel {
+        max-width: 1200px;
+        margin: 2rem auto;
+        padding: 2rem;
+        background-color: #fff;
+        border-radius: 10px;
+        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+    }
+    
+    .verify-panel-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+    }
+    
+    .verify-panel-header h2 {
+        font-size: 2rem;
+        color: #2c3e50;
+        margin: 0;
+    }
+    
+    .verify-panel-header p {
+        font-size: 1.1rem;
+        color: #7f8c8d;
+        margin: 0.5rem 0 0;
+    }
+    
+    .verification-list {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    
+    #verification-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    #verification-table thead {
+        background-color: #34495e;
+        color: white;
+    }
+    
+    #verification-table th {
+        padding: 1rem;
+        text-align: left;
+        font-weight: 600;
+    }
+    
+    #verification-table td {
+        padding: 1rem;
+        border-bottom: 1px solid #dfe6e9;
+    }
+    
+    #verification-table tbody tr:hover {
+        background-color: #ecf0f1;
+    }
+    
+    .status-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 50px;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+    
+    .status-pending {
+        background-color: #f39c12;
+        color: white;
+    }
+    
+    .report-type-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+    
+    .type-earthquake { background-color: #9b59b6; color: white; }
+    .type-flood { background-color: #3498db; color: white; }
+    .type-wildfire { background-color: #e74c3c; color: white; }
+    .type-storm { background-color: #2980b9; color: white; }
+    .type-landslide { background-color: #d35400; color: white; }
+    .type-other { background-color: #7f8c8d; color: white; }
+    
+    .severity-indicator {
+        display: inline-flex;
+        gap: 3px;
+    }
+    
+    .severity-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background-color: #dfe6e9;
+    }
+    
+    .severity-active {
+        background-color: #e74c3c;
+    }
+    
+    .btn {
+        display: inline-block;
+        padding: 0.5rem 1rem;
+        font-size: 0.9rem;
+        font-weight: 500;
+        text-decoration: none;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-view {
+        background-color: #3498db;
+        color: white;
+        border: none;
+    }
+    
+    .btn-view:hover {
+        background-color: #2980b9;
+    }
+    
+    .btn-verify {
+        background-color: #2ecc71;
+        color: white;
+        border: none;
+    }
+    
+    .btn-verify:hover {
+        background-color: #27ae60;
+    }
+    
+    .btn-reject {
+        background-color: #e74c3c;
+        color: white;
+        border: none;
+    }
+    
+    .btn-reject:hover {
+        background-color: #c0392b;
+    }
+    
+    .btn-neutral {
+        background-color: #f8f9fa;
+        color: #2c3e50;
+        border: 1px solid #dfe6e9;
+    }
+    
+    .btn-neutral:hover {
+        background-color: #ecf0f1;
+    }
+    
+    .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+        overflow-y: auto;
+    }
+    
+    .modal-content {
+        position: relative;
+        margin: 5% auto;
+        max-width: 700px;
+        background-color: #fff;
+        border-radius: 8px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        padding: 2rem;
+    }
+    
+    .close-modal {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        font-size: 1.5rem;
+        color: #7f8c8d;
+        cursor: pointer;
+        transition: color 0.3s;
+    }
+    
+    .close-modal:hover {
+        color: #2c3e50;
+    }
+    
+    .modal-content h3 {
+        font-size: 1.8rem;
+        color: #2c3e50;
+        margin-top: 0;
+        margin-bottom: 1.5rem;
+    }
+    
+    #report-detail-content {
+        margin-bottom: 2rem;
+    }
+    
+    #report-detail-content h4 {
+        font-size: 1.5rem;
+        color: #2c3e50;
+        margin-bottom: 1rem;
+    }
+    
+    #report-detail-content p {
+        margin-bottom: 1rem;
+        font-size: 1.1rem;
+        color: #34495e;
+    }
+    
+    .modal-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: flex-end;
+        border-top: 1px solid #ecf0f1;
+        padding-top: 1.5rem;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: #7f8c8d;
+    }
+    
+    .empty-state-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        color: #bdc3c7;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
     <section class="verify-panel">
-        <h2>Report Verification</h2>
-        <p>Review and verify user-submitted disaster reports</p>
+        <div class="verify-panel-header">
+            <div>
+                <h2>Report Verification</h2>
+                <p>Review and verify user-submitted disaster reports</p>
+            </div>
+            <div class="filter-controls">
+                <select id="filter-type" class="btn btn-neutral">
+                    <option value="">All Types</option>
+                    <option value="earthquake">Earthquake</option>
+                    <option value="flood">Flood</option>
+                    <option value="wildfire">Wildfire</option>
+                    <option value="storm">Storm</option>
+                    <option value="landslide">Landslide</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+        </div>
         
         <div class="verification-list">
             <table id="verification-table">
@@ -24,7 +276,12 @@
                 <tbody id="reports-to-verify">
                     <!-- Will be populated by JavaScript -->
                     <tr>
-                        <td colspan="8">Loading reports...</td>
+                        <td colspan="8" class="empty-state">
+                            <div class="empty-state-icon">
+                                <i class="fas fa-spinner fa-spin"></i>
+                            </div>
+                            <p>Loading reports...</p>
+                        </td>
                     </tr>
                 </tbody>
             </table>
@@ -39,9 +296,9 @@
                 <!-- Will be populated when a report is clicked -->
             </div>
             <div class="modal-actions">
-                <button id="verify-report" class="btn-verify">Verify Report</button>
-                <button id="reject-report" class="btn-reject">Reject Report</button>
-                <button id="request-more-info" class="btn-neutral">Request More Info</button>
+                <button id="verify-report" class="btn btn-verify">Verify Report</button>
+                <button id="reject-report" class="btn btn-reject">Reject Report</button>
+                <button id="request-more-info" class="btn btn-neutral">Request More Info</button>
             </div>
         </div>
     </div>
@@ -51,6 +308,11 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             loadReportsForVerification();
+            
+            // Filter by type
+            document.getElementById('filter-type').addEventListener('change', function() {
+                loadReportsForVerification(this.value);
+            });
             
             // Close modal when clicking X
             document.querySelector('.close-modal').addEventListener('click', function() {
@@ -82,7 +344,7 @@
             });
         });
         
-        function loadReportsForVerification() {
+        function loadReportsForVerification(typeFilter = '') {
             // In a real application, this would fetch from the server
             // For demo purposes, we'll use dummy data
             
@@ -94,7 +356,7 @@
                         "type": "flood", 
                         "title": "Street flooding in downtown",
                         "description": "Several streets in the downtown area are flooded after heavy rain.",
-                       "lat": 40.7128,
+                        "lat": 40.7128,
                         "lng": -74.0060,
                         "timestamp": new Date().toISOString(),
                         "severity": 2,
@@ -120,18 +382,45 @@
                 const tbody = document.getElementById('reports-to-verify');
                 tbody.innerHTML = '';
                 
-                reports.forEach(report => {
+                // Apply filter if needed
+                const filteredReports = typeFilter ? 
+                    reports.filter(report => report.type === typeFilter) : 
+                    reports;
+                
+                if (filteredReports.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="8" class="empty-state">
+                                <div class="empty-state-icon">
+                                    <i class="fas fa-search"></i>
+                                </div>
+                                <p>No reports found matching your criteria</p>
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+                
+                filteredReports.forEach(report => {
                     const row = document.createElement('tr');
+                    
+                    // Create severity indicator
+                    let severityHtml = '<div class="severity-indicator">';
+                    for (let i = 1; i <= 5; i++) {
+                        severityHtml += `<span class="severity-dot ${i <= report.severity ? 'severity-active' : ''}"></span>`;
+                    }
+                    severityHtml += '</div>';
+                    
                     row.innerHTML = `
-                        <td>${report.type}</td>
+                        <td><span class="report-type-badge type-${report.type}">${report.type}</span></td>
                         <td>${report.title}</td>
-                        <td>${report.description.substring(0, 50)}...</td>
+                        <td>${report.description.substring(0, 50)}${report.description.length > 50 ? '...' : ''}</td>
                         <td>${report.lat.toFixed(2)}, ${report.lng.toFixed(2)}</td>
-                        <td>${report.severity}</td>
+                        <td>${severityHtml}</td>
                         <td>${new Date(report.timestamp).toLocaleString()}</td>
                         <td>${report.contact}</td>
                         <td>
-                            <button class="btn-view" data-report-id="${report.id}">View</button>
+                            <button class="btn btn-view" data-report-id="${report.id}">View Details</button>
                         </td>
                     `;
                     tbody.appendChild(row);
@@ -148,14 +437,37 @@
             const modal = document.getElementById('report-detail-modal');
             const content = document.getElementById('report-detail-content');
             
+            // Create severity indicator
+            let severityHtml = '<div class="severity-indicator" style="margin: 10px 0;">';
+            for (let i = 1; i <= 5; i++) {
+                severityHtml += `<span class="severity-dot ${i <= report.severity ? 'severity-active' : ''}" style="width: 16px; height: 16px;"></span>`;
+            }
+            severityHtml += ' <span style="margin-left: 10px;">' + 
+                (report.severity === 1 ? 'Minor' : 
+                report.severity === 2 ? 'Moderate' : 
+                report.severity === 3 ? 'Significant' : 
+                report.severity === 4 ? 'Severe' : 'Extreme') + '</span></div>';
+            
             content.innerHTML = `
                 <h4>${report.title}</h4>
-                <p><strong>Type:</strong> ${report.type}</p>
+                <p><span class="report-type-badge type-${report.type}" style="margin-right: 10px;">${report.type}</span>
+                <span class="status-badge status-pending">Pending Verification</span></p>
+                
                 <p><strong>Description:</strong> ${report.description}</p>
+                
+                <p><strong>Severity:</strong> ${severityHtml}</p>
+                
                 <p><strong>Location:</strong> ${report.lat.toFixed(4)}, ${report.lng.toFixed(4)}</p>
-                <p><strong>Severity:</strong> ${report.severity} out of 5</p>
+                
                 <p><strong>Reported:</strong> ${new Date(report.timestamp).toLocaleString()}</p>
+                
                 <p><strong>Reporter Contact:</strong> ${report.contact}</p>
+                
+                <!-- If we had images, they would display here -->
+                <div class="report-media" style="margin-top: 20px; display: none;">
+                    <h5>Submitted Media</h5>
+                    <p class="helper-text">No media files were submitted with this report.</p>
+                </div>
             `;
             
             // Set report ID for action buttons
@@ -172,7 +484,8 @@
             document.getElementById('report-detail-modal').style.display = 'none';
             
             // Refresh the list
-            loadReportsForVerification();
+            const typeFilter = document.getElementById('filter-type').value;
+            loadReportsForVerification(typeFilter);
         }
     </script>
 {% endblock %}

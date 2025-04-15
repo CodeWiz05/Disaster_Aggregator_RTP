@@ -1,217 +1,544 @@
 {% extends "base.html" %}
 
-{% block title %}Historical Disaster Data{% endblock %}
+{% block title %}DisasterTrack - Historical Data Analysis{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
+{% endblock %}
 
 {% block content %}
-    <section class="history-page">
-        <h2>Historical Disaster Data</h2>
-        <p>Analysis and trends of past disasters</p>
-        
-        <div class="filter-controls">
-            <h3>Filter Data</h3>
-            <div class="filter-row">
-                <div>
-                    <label for="history-type">Disaster Type:</label>
-                    <select id="history-type">
-                        <option value="all">All Types</option>
-                        <option value="earthquake">Earthquakes</option>
-                        <option value="flood">Floods</option>
-                        <option value="wildfire">Wildfires</option>
-                        <option value="storm">Storms</option>
-                    </select>
+<section class="subpage-hero">
+    <div class="container">
+        <div class="subpage-hero-content">
+            <h1><i class="fas fa-history"></i> Historical Disaster Data</h1>
+            <p>Analyze trends and patterns of past disasters to better understand and predict future events.</p>
+        </div>
+    </div>
+</section>
+
+<section class="filter-controls-section">
+    <div class="container">
+        <div class="filter-panel">
+            <div class="filter-header">
+                <h3><i class="fas fa-filter"></i> Filter Data</h3>
+                <button id="expand-filters" class="btn btn-sm btn-text"><i class="fas fa-chevron-down"></i> <span>Expand</span></button>
+            </div>
+            
+            <div class="filter-body">
+                <div class="filter-grid">
+                    <div class="filter-group">
+                        <label for="history-type">
+                            <i class="fas fa-tag"></i> Disaster Type
+                        </label>
+                        <select id="history-type" class="form-control">
+                            <option value="all">All Types</option>
+                            <option value="earthquake">Earthquakes</option>
+                            <option value="flood">Floods</option>
+                            <option value="wildfire">Wildfires</option>
+                            <option value="storm">Storms</option>
+                            <option value="landslide">Landslides</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    
+                    <div class="filter-group">
+                        <label for="history-year">
+                            <i class="far fa-calendar"></i> Year
+                        </label>
+                        <select id="history-year" class="form-control">
+                            <option value="all">All Years</option>
+                            <option value="2025">2025</option>
+                            <option value="2024">2024</option>
+                            <option value="2023">2023</option>
+                            <option value="2022">2022</option>
+                        </select>
+                    </div>
+                    
+                    <div class="filter-group">
+                        <label for="history-region">
+                            <i class="fas fa-globe-americas"></i> Region
+                        </label>
+                        <select id="history-region" class="form-control">
+                            <option value="all">Worldwide</option>
+                            <option value="na">North America</option>
+                            <option value="sa">South America</option>
+                            <option value="eu">Europe</option>
+                            <option value="as">Asia</option>
+                            <option value="af">Africa</option>
+                            <option value="oc">Oceania</option>
+                        </select>
+                    </div>
+                    
+                    <div class="filter-group">
+                        <label for="history-severity">
+                            <i class="fas fa-exclamation-circle"></i> Min Severity
+                        </label>
+                        <select id="history-severity" class="form-control">
+                            <option value="1">Any (1+)</option>
+                            <option value="2">Moderate (2+)</option>
+                            <option value="3">Significant (3+)</option>
+                            <option value="4">Severe (4+)</option>
+                            <option value="5">Extreme (5)</option>
+                        </select>
+                    </div>
                 </div>
-                <div>
-                    <label for="history-year">Year:</label>
-                    <select id="history-year">
-                        <option value="all">All Years</option>
-                        <option value="2025">2025</option>
-                        <option value="2024">2024</option>
-                        <option value="2023">2023</option>
-                        <option value="2022">2022</option>
-                    </select>
+                
+                <div class="date-range-group">
+                    <label><i class="far fa-calendar-alt"></i> Custom Date Range</label>
+                    <div class="date-inputs">
+                        <div class="date-field">
+                            <label for="date-from">From</label>
+                            <input type="text" id="date-from" class="form-control date-picker" placeholder="Start date">
+                        </div>
+                        <div class="date-field">
+                            <label for="date-to">To</label>
+                            <input type="text" id="date-to" class="form-control date-picker" placeholder="End date">
+                        </div>
+                    </div>
                 </div>
-                <div>
-                    <label for="history-region">Region:</label>
-                    <select id="history-region">
-                        <option value="all">Worldwide</option>
-                        <option value="na">North America</option>
-                        <option value="sa">South America</option>
-                        <option value="eu">Europe</option>
-                        <option value="as">Asia</option>
-                        <option value="af">Africa</option>
-                        <option value="oc">Oceania</option>
-                    </select>
+                
+                <div class="filter-actions">
+                    <button id="apply-history-filters" class="btn btn-primary"><i class="fas fa-check"></i> Apply Filters</button>
+                    <button id="reset-history-filters" class="btn btn-text"><i class="fas fa-undo"></i> Reset</button>
                 </div>
-                <button id="apply-history-filters">Apply Filters</button>
             </div>
         </div>
+    </div>
+</section>
+
+<section class="charts-section">
+    <div class="container">
+        <h2 class="section-title"><i class="fas fa-chart-line"></i> Visual Data Analysis</h2>
         
-        <div class="history-charts">
-            <div class="chart-container">
-                <h3>Disasters by Type</h3>
-                <div id="type-chart" class="chart-placeholder">
-                    <p>Chart will appear here</p>
+        <div class="charts-grid">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h3><i class="fas fa-chart-pie"></i> Disasters by Type</h3>
+                    <div class="chart-controls">
+                        <button class="btn btn-sm btn-icon chart-info" title="About this chart"><i class="fas fa-info-circle"></i></button>
+                        <button class="btn btn-sm btn-icon chart-download" title="Download data"><i class="fas fa-download"></i></button>
+                        <button class="btn btn-sm btn-icon chart-fullscreen" title="Fullscreen"><i class="fas fa-expand"></i></button>
+                    </div>
+                </div>
+                <div class="chart-body">
+                    <div id="type-chart" class="chart-container">
+                        <div class="chart-loading">
+                            <div class="loading-spinner"></div>
+                            <p>Loading chart...</p>
+                        </div>
+                    </div>
                 </div>
             </div>
             
-            <div class="chart-container">
-                <h3>Disasters by Month</h3>
-                <div id="month-chart" class="chart-placeholder">
-                    <p>Chart will appear here</p>
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h3><i class="fas fa-calendar-alt"></i> Disasters by Month</h3>
+                    <div class="chart-controls">
+                        <button class="btn btn-sm btn-icon chart-info" title="About this chart"><i class="fas fa-info-circle"></i></button>
+                        <button class="btn btn-sm btn-icon chart-download" title="Download data"><i class="fas fa-download"></i></button>
+                        <button class="btn btn-sm btn-icon chart-fullscreen" title="Fullscreen"><i class="fas fa-expand"></i></button>
+                    </div>
+                </div>
+                <div class="chart-body">
+                    <div id="month-chart" class="chart-container">
+                        <div class="chart-loading">
+                            <div class="loading-spinner"></div>
+                            <p>Loading chart...</p>
+                        </div>
+                    </div>
                 </div>
             </div>
             
-            <div class="chart-container">
-                <h3>Severity Distribution</h3>
-                <div id="severity-chart" class="chart-placeholder">
-                    <p>Chart will appear here</p>
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h3><i class="fas fa-exclamation-triangle"></i> Severity Distribution</h3>
+                    <div class="chart-controls">
+                        <button class="btn btn-sm btn-icon chart-info" title="About this chart"><i class="fas fa-info-circle"></i></button>
+                        <button class="btn btn-sm btn-icon chart-download" title="Download data"><i class="fas fa-download"></i></button>
+                        <button class="btn btn-sm btn-icon chart-fullscreen" title="Fullscreen"><i class="fas fa-expand"></i></button>
+                    </div>
+                </div>
+                <div class="chart-body">
+                    <div id="severity-chart" class="chart-container">
+                        <div class="chart-loading">
+                            <div class="loading-spinner"></div>
+                            <p>Loading chart...</p>
+                        </div>
+                    </div>
                 </div>
             </div>
             
-            <div class="chart-container wide">
-                <h3>Geographic Distribution</h3>
-                <div id="geo-chart" class="chart-placeholder">
-                    <p>Map will appear here</p>
+            <div class="chart-card full-width">
+                <div class="chart-header">
+                    <h3><i class="fas fa-map-marked-alt"></i> Geographic Distribution</h3>
+                    <div class="chart-controls">
+                        <button class="btn btn-sm btn-icon chart-info" title="About this chart"><i class="fas fa-info-circle"></i></button>
+                        <button class="btn btn-sm btn-icon chart-download" title="Download data"><i class="fas fa-download"></i></button>
+                        <button class="btn btn-sm btn-icon chart-fullscreen" title="Fullscreen"><i class="fas fa-expand"></i></button>
+                    </div>
+                </div>
+                <div class="chart-body">
+                    <div id="geo-chart" class="chart-container map-chart">
+                        <div class="chart-loading">
+                            <div class="loading-spinner"></div>
+                            <p>Loading map...</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
+    </div>
+</section>
+
+<section class="trends-section">
+    <div class="container">
+        <h2 class="section-title"><i class="fas fa-analytics"></i> Key Insights</h2>
         
-        <div class="data-download">
-            <h3>Download Historical Data</h3>
-            <p>Download data for research or analysis</p>
-            <div class="download-buttons">
-                <button id="download-csv">CSV</button>
-                <button id="download-json">JSON</button>
-                <button id="download-xlsx">Excel</button>
+        <div class="insights-grid">
+            <div class="insight-card">
+                <div class="insight-icon">
+                    <i class="fas fa-arrow-trend-up"></i>
+                </div>
+                <div class="insight-content">
+                    <h3>Most Active Regions</h3>
+                    <p>The Pacific Ring of Fire continues to show the highest concentration of seismic activity, with a 12% increase in earthquake frequency compared to last year.</p>
+                </div>
+            </div>
+            
+            <div class="insight-card">
+                <div class="insight-icon">
+                    <i class="fas fa-calendar-check"></i>
+                </div>
+                <div class="insight-content">
+                    <h3>Seasonal Patterns</h3>
+                    <p>Wildfires peak during summer months (June-August in the Northern Hemisphere), while flood events are most common during spring thaw periods.</p>
+                </div>
+            </div>
+            
+            <div class="insight-card">
+                <div class="insight-icon">
+                    <i class="fas fa-chart-column"></i>
+                </div>
+                <div class="insight-content">
+                    <h3>Year-over-Year Trends</h3>
+                    <p>Category 4-5 hurricanes have increased by 8% compared to the 10-year average, supporting climate change impact predictions.</p>
+                </div>
+            </div>
+            
+            <div class="insight-card">
+                <div class="insight-icon">
+                    <i class="fas fa-lightbulb"></i>
+                </div>
+                <div class="insight-content">
+                    <h3>Notable Correlations</h3>
+                    <p>Areas with deforestation rates above 5% annually show a 27% higher incidence of severe flooding events within 3-5 years.</p>
+                </div>
             </div>
         </div>
-    </section>
+    </div>
+</section>
+
+<section class="download-section">
+    <div class="container">
+        <div class="download-panel">
+            <div class="download-header">
+                <h2><i class="fas fa-download"></i> Download Historical Data</h2>
+                <p>Access historical disaster records for research, analysis, or reporting purposes.</p>
+            </div>
+            
+            <div class="download-options">
+                <div class="format-selector">
+                    <label>Select Format</label>
+                    <div class="format-buttons">
+                        <button id="download-csv" class="format-button active" data-format="csv">
+                            <i class="fas fa-file-csv"></i>
+                            <span>CSV</span>
+                        </button>
+                        <button id="download-json" class="format-button" data-format="json">
+                            <i class="fas fa-file-code"></i>
+                            <span>JSON</span>
+                        </button>
+                        <button id="download-xlsx" class="format-button" data-format="xlsx">
+                            <i class="fas fa-file-excel"></i>
+                            <span>Excel</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="download-actions">
+                    <button class="btn btn-primary" id="start-download">
+                        <i class="fas fa-download"></i> Download Data
+                    </button>
+                    <div class="download-info">
+                        <span><i class="fas fa-info-circle"></i> Current filter settings will be applied to downloaded data</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
 {% endblock %}
 
 {% block scripts %}
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Simulate loading data and creating charts
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chart.js/3.9.1/chart.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize date pickers
+        flatpickr('.date-picker', {
+            dateFormat: 'Y-m-d',
+            maxDate: 'today'
+        });
+        
+        // Expand/collapse filter panel
+        document.getElementById('expand-filters').addEventListener('click', function() {
+            const filterBody = document.querySelector('.filter-body');
+            const expandBtn = document.getElementById('expand-filters');
+            const isExpanded = filterBody.classList.toggle('expanded');
+            
+            if (isExpanded) {
+                expandBtn.innerHTML = '<i class="fas fa-chevron-up"></i> <span>Collapse</span>';
+            } else {
+                expandBtn.innerHTML = '<i class="fas fa-chevron-down"></i> <span>Expand</span>';
+            }
+        });
+        
+        // Format selector buttons
+        document.querySelectorAll('.format-button').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.format-button').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+        
+        // Create charts
+        setTimeout(function() {
+            createTypeChart();
+            createMonthChart();
+            createSeverityChart();
+            createGeoChart();
+        }, 800);
+        
+        // Handle download button click
+        document.getElementById('start-download').addEventListener('click', function() {
+            const selectedFormat = document.querySelector('.format-button.active').dataset.format;
+            alert(`Downloading data in ${selectedFormat.toUpperCase()} format. In a real implementation, this would start the download.`);
+        });
+        
+        // Handle chart controls
+        document.querySelectorAll('.chart-fullscreen').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const chartCard = this.closest('.chart-card');
+                chartCard.classList.toggle('fullscreen');
+                
+                if (chartCard.classList.contains('fullscreen')) {
+                    this.innerHTML = '<i class="fas fa-compress"></i>';
+                    this.title = 'Exit fullscreen';
+                } else {
+                    this.innerHTML = '<i class="fas fa-expand"></i>';
+                    this.title = 'Fullscreen';
+                }
+            });
+        });
+        
+        document.querySelectorAll('.chart-info').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const chartTitle = this.closest('.chart-header').querySelector('h3').textContent;
+                alert(`Info about "${chartTitle}" chart would be shown here.`);
+            });
+        });
+        
+        document.querySelectorAll('.chart-download').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const chartTitle = this.closest('.chart-header').querySelector('h3').textContent;
+                alert(`Download options for "${chartTitle}" would be shown here.`);
+            });
+        });
+        
+        // Filter actions
+        document.getElementById('apply-history-filters').addEventListener('click', function() {
+            alert('Filters applied! Charts would update in the real application.');
+            // Simulate chart reload
+            document.querySelectorAll('.chart-container').forEach(container => {
+                container.innerHTML = '<div class="chart-loading"><div class="loading-spinner"></div><p>Loading chart...</p></div>';
+            });
+            
             setTimeout(function() {
                 createTypeChart();
                 createMonthChart();
                 createSeverityChart();
-                initGeoChart();
-            }, 500);
-            
-            // Set up download buttons
-            document.getElementById('download-csv').addEventListener('click', function() {
-                alert('In a real implementation, this would download a CSV file');
-            });
-            
-            document.getElementById('download-json').addEventListener('click', function() {
-                alert('In a real implementation, this would download a JSON file');
-            });
-            
-            document.getElementById('download-xlsx').addEventListener('click', function() {
-                alert('In a real implementation, this would download an Excel file');
-            });
-            
-            // Filter button
-            document.getElementById('apply-history-filters').addEventListener('click', function() {
-                // In a real app, this would reload the data and update the charts
-                alert('Filters applied! Charts would update in the real application.');
-            });
+                createGeoChart();
+            }, 800);
         });
         
-        function createTypeChart() {
-            const ctx = document.getElementById('type-chart');
-            ctx.innerHTML = '';
+        document.getElementById('reset-history-filters').addEventListener('click', function() {
+            // Reset all filters to defaults
+            document.getElementById('history-type').value = 'all';
+            document.getElementById('history-year').value = 'all';
+            document.getElementById('history-region').value = 'all';
+            document.getElementById('history-severity').value = '1';
+            document.getElementById('date-from').value = '';
+            document.getElementById('date-to').value = '';
             
-            const canvas = document.createElement('canvas');
-            ctx.appendChild(canvas);
-            
-            new Chart(canvas, {
-                type: 'pie',
-                data: {
-                    labels: ['Earthquakes', 'Floods', 'Wildfires', 'Storms', 'Other'],
-                    datasets: [{
-                        data: [25, 18, 15, 22, 7],
-                        backgroundColor: [
-                            '#FF6384',
-                            '#36A2EB',
-                            '#FFCE56',
-                            '#4BC0C0',
-                            '#9966FF'
-                        ]
-                    }]
+            alert('Filters have been reset.');
+        });
+    });
+    
+    function createTypeChart() {
+        const container = document.getElementById('type-chart');
+        container.innerHTML = '';
+        
+        const canvas = document.createElement('canvas');
+        container.appendChild(canvas);
+        
+        new Chart(canvas, {
+            type: 'pie',
+            data: {
+                labels: ['Earthquakes', 'Floods', 'Wildfires', 'Storms', 'Landslides', 'Other'],
+                datasets: [{
+                    data: [25, 18, 15, 22, 7, 5],
+                    backgroundColor: [
+                        '#FF6384',
+                        '#36A2EB',
+                        '#FFCE56',
+                        '#4BC0C0',
+                        '#9966FF',
+                        '#C9CBCF'
+                    ],
+                    borderWidth: 1,
+                    borderColor: '#ffffff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: {
+                            padding: 15,
+                            usePointStyle: true,
+                            pointStyle: 'circle'
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0,0,0,0.8)',
+                        padding: 12,
+                        titleFont: {
+                            size: 14
+                        },
+                        bodyFont: {
+                            size: 13
+                        },
+                        displayColors: true
+                    }
+                }
+            }
+        });
+    }
+    
+    function createMonthChart() {
+        const container = document.getElementById('month-chart');
+        container.innerHTML = '';
+        
+        const canvas = document.createElement('canvas');
+        container.appendChild(canvas);
+        
+        new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+                datasets: [{
+                    label: 'Number of Disasters',
+                    data: [5, 7, 9, 12, 15, 18, 22, 25, 18, 12, 8, 6],
+                    backgroundColor: '#36A2EB',
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.05)'
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false
+                        }
+                    }
                 },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: {
-                            position: 'right',
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+    }
+    
+    function createSeverityChart() {
+        const container = document.getElementById('severity-chart');
+        container.innerHTML = '';
+        
+        const canvas = document.createElement('canvas');
+        container.appendChild(canvas);
+        
+        new Chart(canvas, {
+            type: 'doughnut',
+            data: {
+                labels: ['Level 1', 'Level 2', 'Level 3', 'Level 4', 'Level 5'],
+                datasets: [{
+                    data: [30, 25, 20, 15, 10],
+                    backgroundColor: [
+                        '#C5E8B7',
+                        '#ABE098',
+                        '#83CE87',
+                        '#57BB59',
+                        '#009900'
+                    ],
+                    borderWidth: 1,
+                    borderColor: '#ffffff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '65%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            padding: 15,
+                            usePointStyle: true,
+                            pointStyle: 'circle'
                         }
                     }
                 }
-            });
-        }
+            }
+        });
+    }
+    
+    function createGeoChart() {
+        const container = document.getElementById('geo-chart');
+        container.innerHTML = '';
         
-        function createMonthChart() {
-            const ctx = document.getElementById('month-chart');
-            ctx.innerHTML = '';
-            
-            const canvas = document.createElement('canvas');
-            ctx.appendChild(canvas);
-            
-            new Chart(canvas, {
-                type: 'bar',
-                data: {
-                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-                    datasets: [{
-                        label: 'Number of Disasters',
-                        data: [5, 7, 9, 12, 15, 18, 22, 25, 18, 12, 8, 6],
-                        backgroundColor: '#36A2EB'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
-                    }
-                }
-            });
-        }
+        // In a real application, this would be a proper map visualization
+        // Here we'll just create a placeholder with some styling
+        const mapPlaceholder = document.createElement('div');
+        mapPlaceholder.className = 'map-placeholder';
         
-        function createSeverityChart() {
-            const ctx = document.getElementById('severity-chart');
-            ctx.innerHTML = '';
-            
-            const canvas = document.createElement('canvas');
-            ctx.appendChild(canvas);
-            
-            new Chart(canvas, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Level 1', 'Level 2', 'Level 3', 'Level 4', 'Level 5'],
-                    datasets: [{
-                        data: [30, 25, 20, 15, 10],
-                        backgroundColor: [
-                            '#C5E8B7',
-                            '#ABE098',
-                            '#83CE87',
-                            '#57BB59',
-                            '#009900'
-                        ]
-                    }]
-                },
-                options: {
-                    responsive: true
-                }
-            });
-        }
+        mapPlaceholder.innerHTML = `
+            <div class="map-overlay">
+                <i class="fas fa-map-marked-alt"></i>
+                <p>In a real implementation, this would display a detailed heatmap showing disaster frequency by geographic location.</p>
+            </div>
+        `;
         
-        function initGeoChart() {
-            const container = document.getElementById('geo-chart');
-            container.innerHTML = 'In a real implementation, this would show a heatmap of disaster locations.';
-        }
-    </script>
+        container.appendChild(mapPlaceholder);
+    }
+</script>
 {% endblock %}
