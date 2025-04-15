@@ -44,8 +44,13 @@ class BaseConfig:
     LOG_FILE = os.environ.get('LOG_FILE', 'logs/app.log')
     
     # Scraper configuration
-    SCRAPE_INTERVAL = int(os.environ.get('SCRAPE_INTERVAL', 3600))  # in seconds
-    
+    try:
+        SCRAPE_INTERVAL = int(os.environ.get('SCRAPE_INTERVAL', '3600').strip())
+    except ValueError:
+        SCRAPE_INTERVAL = 3600  # default value
+        # Optionally, log a warning about the invalid environment variable
+
+
     # API rate limiting
     RATELIMIT_DEFAULT = "100/hour"
     RATELIMIT_STORAGE_URL = "memory://"
