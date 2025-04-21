@@ -1,161 +1,199 @@
-import requests
-import json
-import os
-from datetime import datetime, timedelta
+# app/fetch_api.py
+import httpx
+import asyncio
+import traceback
+from datetime import datetime, timezone, timedelta
+from app import db # Import db instance
+from app.models import DisasterReport # Import model
+# Import invalidate function carefully
+# It's defined globally in __init__.py, so direct import should be okay
+from app import invalidate_disaster_api_cache
+# For logging errors
+from flask import current_app
 
-def fetch_usgs_earthquakes():
+# --- Async Fetcher for USGS ---
+async def fetch_usgs_earthquakes_async(client: httpx.AsyncClient):
     """
-    Fetch earthquake data from USGS API
-    Returns earthquake data for the past 7 days with magnitude > 4.5
+    Fetch earthquake data from USGS API asynchronously and prepare for DB save.
+    Returns a list of new DisasterReport objects (not yet committed).
     """
+    url = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_week.geojson"
+    current_app.logger.info("Fetching USGS data...")
+    new_reports = []
     try:
-        url = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_week.geojson"
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        
+        response = await client.get(url, timeout=30.0) # Use longer timeout
+        response.raise_for_status() # Check for HTTP 4xx/5xx errors
         data = response.json()
-        processed_data = []
-        
-        for feature in data['features']:
-            props = feature['properties']
-            coords = feature['geometry']['coordinates']
-            
-            processed_data.append({
-                "id": feature['id'],
-                "type": "earthquake",
-                "title": props['title'],
-                "description": f"Magnitude {props['mag']} earthquake at depth of {coords[2]}km",
-                "lat": coords[1],
-                "lng": coords[0],
-                "timestamp": datetime.fromtimestamp(props['time']/1000).isoformat(),
-                "severity": min(int(props['mag']), 5),  # Map magnitude to severity 1-5
-                "verified": True,
-                "source": "USGS"
-            })
-        
-        return processed_data
+        current_app.logger.debug(f"USGS data received: {len(data.get('features', []))} features.")
+
+        for feature in data.get('features', []):
+            props = feature.get('properties', {})
+            geom = feature.get('geometry', {})
+            coords = geom.get('coordinates')
+            api_event_id = feature.get('id')
+
+            # Validation of essential fields from API response
+            if not api_event_id:
+                 current_app.logger.warning(f"Skipping USGS record due to missing 'id'")
+                 continue
+            if not props:
+                 current_app.logger.warning(f"Skipping USGS record {api_event_id} due to missing 'properties'")
+                 continue
+            if not geom or not coords or len(coords) < 3:
+                current_app.logger.warning(f"Skipping USGS record {api_event_id} due to missing/invalid 'geometry'")
+                continue
+            if props.get('mag') is None: # mag can be 0, check for None
+                 current_app.logger.warning(f"Skipping USGS record {api_event_id} due to missing 'mag'")
+                 continue
+            if props.get('time') is None:
+                 current_app.logger.warning(f"Skipping USGS record {api_event_id} due to missing 'time'")
+                 continue
+
+
+            # Deduplication check against database
+            try:
+                exists = db.session.query(DisasterReport.id).filter_by(
+                    source="USGS",
+                    source_event_id=api_event_id
+                ).limit(1).scalar() is not None
+                if exists:
+                    continue # Skip if already exists
+            except Exception as db_err:
+                 current_app.logger.error(f"DB error checking existence for USGS {api_event_id}: {db_err}")
+                 continue # Skip if we can't check
+
+
+            # Process timestamp
+            try:
+                timestamp_ms = props['time']
+                timestamp_dt = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc)
+            except (TypeError, ValueError, OverflowError) as ts_err:
+                 current_app.logger.warning(f"Skipping USGS record {api_event_id} due to invalid timestamp '{props.get('time')}': {ts_err}")
+                 continue
+
+            # Process magnitude and severity
+            magnitude = None
+            severity = None
+            try:
+                magnitude = float(props['mag'])
+                if magnitude >= 7: severity = 5
+                elif magnitude >= 6: severity = 4
+                elif magnitude >= 5: severity = 3
+                elif magnitude >= 4: severity = 2
+                else: severity = 1 # Assuming magnitude can be less than 4.0 based on endpoint? Adjust if needed.
+            except (ValueError, TypeError) as mag_err:
+                current_app.logger.warning(f"Skipping USGS record {api_event_id} due to invalid magnitude '{props.get('mag')}': {mag_err}")
+                continue
+
+            # Create model instance
+            try:
+                report = DisasterReport(
+                    source_event_id=api_event_id,
+                    title=props.get('title', f"Magnitude {magnitude:.1f} Earthquake"), # Use title if available
+                    description=f"Location: {props.get('place', 'N/A')}. Depth: {coords[2]:.2f}km",
+                    disaster_type="earthquake",
+                    latitude=coords[1],
+                    longitude=coords[0],
+                    depth_km=coords[2],
+                    magnitude=magnitude,
+                    timestamp=timestamp_dt,
+                    severity=severity,
+                    verified=True, # Trust USGS data
+                    source="USGS"
+                )
+                new_reports.append(report)
+            except Exception as model_err:
+                 current_app.logger.error(f"Error creating DisasterReport object for {api_event_id}: {model_err}")
+                 continue # Skip this report if model creation fails
+
+
+        current_app.logger.info(f"Prepared {len(new_reports)} new USGS reports for DB.")
+        return new_reports
+
+    except httpx.HTTPStatusError as e:
+        current_app.logger.error(f"HTTP error fetching USGS data: {e.response.status_code} - {e.request.url}")
+    except httpx.RequestError as e:
+        current_app.logger.error(f"Network error fetching USGS data: {e}")
     except Exception as e:
-        print(f"Error fetching USGS data: {e}")
-        # Return dummy data as fallback
-        return [{
-            "id": "usgs-eq-1002",
-            "type": "earthquake",
-            "title": "Magnitude 5.8 Earthquake in Chile",
-            "description": "A moderate earthquake struck northern Chile on April 9, 2025.",
-            "lat": -20.5,
-            "lng": -68.9,
-            "timestamp": datetime.now().isoformat(),
-            "severity": 3,
-            "verified": True,
-            "source": "USGS"
-        }]
+        current_app.logger.error(f"Unexpected error processing USGS data: {e}", exc_info=True)
 
-def fetch_gdacs_floods():
-    """
-    This would typically fetch flood data from GDACS API
-    For now, return dummy data
-    """
-    return [{
-        "id": "gdacs-fl-1003",
-        "type": "flood",
-        "title": "Severe Flooding in Eastern India",
-        "description": "Heavy monsoon rains have caused widespread flooding in Bihar state.",
-        "lat": 25.4,
-        "lng": 85.1,
-        "timestamp": (datetime.now() - timedelta(days=2)).isoformat(),
-        "severity": 4,
-        "verified": True,
-        "source": "GDACS"
-    }]
+    return [] # Return empty list on any top-level error
 
-def fetch_all_disasters():
-    """Fetch data from all available APIs and return combined results"""
-    all_data = []
-    
-    # Fetch from each API
-    earthquakes = fetch_usgs_earthquakes()
-    floods = fetch_gdacs_floods()
-    
-    # Add dummy wildfire for diversity
-    wildfires = [{
-        "id": "nasa-wf-1004",
-        "type": "wildfire",
-        "title": "Wildfire in California",
-        "description": "A fast-moving wildfire has consumed over 5,000 acres near Los Angeles.",
-        "lat": 34.05,
-        "lng": -118.25,
-        "timestamp": datetime.now().isoformat(),
-        "severity": 5,
-        "verified": True,
-        "source": "NASA FIRMS"
-    }]
-    
-    # Combine all data
-    all_data.extend(earthquakes)
-    all_data.extend(floods)
-    all_data.extend(wildfires)
-    
-    # Save to cache file
-    cache_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'cached_reports.json')
-    with open(cache_path, 'w') as f:
-        json.dump(all_data, f, indent=2)
-    
-    return all_data
+# --- Placeholder for other async fetchers ---
+async def fetch_gdacs_alerts_async(client: httpx.AsyncClient):
+    current_app.logger.info("Fetching GDACS data... (Placeholder - Not Implemented)")
+    await asyncio.sleep(0.1) # Simulate async work
+    # Add real implementation here later
+    return []
 
-if __name__ == "__main__":
-    disasters = fetch_all_disasters()
-    print(f"Fetched {len(disasters)} disaster reports")
+# --- Runner Function ---
+async def run_fetchers_async():
+    """Runs all async fetchers concurrently and commits results to DB."""
+    current_app.logger.info("Starting async fetchers...")
+    all_new_reports = []
+    # Use a single client session for connection pooling and configuration
+    # Consider setting headers like User-Agent if required by APIs
+    async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
+        fetcher_tasks = [
+            fetch_usgs_earthquakes_async(client),
+            fetch_gdacs_alerts_async(client),
+            # Add other async fetcher calls here
+        ]
+        # return_exceptions=True allows tasks to fail without stopping others
+        results = await asyncio.gather(*fetcher_tasks, return_exceptions=True)
 
-# disaster-aggregator/app/verify.py
-from app.models import DisasterReport
-from app import db
-import json
-import os
-from datetime import datetime
+    current_app.logger.info("Fetcher tasks completed. Processing results...")
+    total_added_count = 0
+    successful_commit = False
 
-def get_unverified_reports():
-    """Get all unverified user reports"""
-    return DisasterReport.query.filter_by(verified=False).all()
+    # Process results from gather
+    for i, result in enumerate(results):
+        task_name = fetcher_tasks[i].__name__ # Get name of the async function
+        if isinstance(result, Exception):
+            # Log the specific exception and traceback for the failed task
+            current_app.logger.error(f"Fetcher task '{task_name}' failed: {result}", exc_info=result)
+        elif isinstance(result, list):
+            valid_reports = [r for r in result if isinstance(r, DisasterReport)]
+            if valid_reports:
+                all_new_reports.extend(valid_reports)
+                current_app.logger.debug(f"Fetcher task '{task_name}' provided {len(valid_reports)} valid reports.")
+            else:
+                 current_app.logger.info(f"Fetcher task '{task_name}' returned no valid reports.")
+        else:
+             current_app.logger.warning(f"Fetcher task '{task_name}' returned unexpected result type: {type(result)}")
 
-def verify_report(report_id, verified=True):
-    """Mark a report as verified or rejected"""
-    report = DisasterReport.query.get(report_id)
-    if report:
-        report.verified = verified
+    if not all_new_reports:
+        current_app.logger.info("No new valid reports prepared by any fetcher.")
+        return # Nothing to commit
+
+    current_app.logger.info(f"Total valid reports prepared for DB: {len(all_new_reports)}. Attempting commit...")
+    try:
+        # Add all collected reports to the session
+        db.session.add_all(all_new_reports)
+        # Commit the session
         db.session.commit()
-        return True
-    return False
+        total_added_count = len(all_new_reports)
+        current_app.logger.info(f"Successfully committed {total_added_count} new reports to the database.")
+        successful_commit = True
+    except SQLAlchemyError as db_err: # Catch specific DB errors
+        current_app.logger.error(f"!!! Database Commit Failed: {db_err} !!!", exc_info=True)
+        db.session.rollback()
+        current_app.logger.info("Database session rolled back.")
+    except Exception as e: # Catch other potential errors during commit
+        current_app.logger.error(f"!!! Unexpected Commit Failed: {e} !!!", exc_info=True)
+        db.session.rollback()
+        current_app.logger.info("Database session rolled back.")
 
-def get_reports_for_verification():
-    """
-    For development/demo purposes, return dummy unverified reports 
-    In production, this would query the database
-    """
-    return [
-        {
-            "id": "user-rp-1005",
-            "type": "flood", 
-            "title": "Street flooding in downtown",
-            "description": "Several streets in the downtown area are flooded after heavy rain.",
-            "lat": 40.7128,
-            "lng": -74.0060,
-            "timestamp": datetime.now().isoformat(),
-            "severity": 2,
-            "verified": False,
-            "source": "User Report",
-            "contact": "anonymous@example.com"
-        },
-        {
-            "id": "user-rp-1006",
-            "type": "storm",
-            "title": "Power outages from storm",
-            "description": "Strong winds have knocked down power lines in the eastern suburbs.",
-            "lat": 40.7328,
-            "lng": -73.9860,
-            "timestamp": datetime.now().isoformat(),
-            "severity": 3,
-            "verified": False,
-            "source": "User Report",
-            "contact": "resident@example.com"
-        }
-    ]
+
+    # --- Invalidate Cache AFTER successful commit ---
+    if successful_commit and total_added_count > 0:
+        current_app.logger.info("Triggering cache invalidation...")
+        try:
+            # Ensure this function exists and is accessible
+            invalidate_disaster_api_cache()
+        except NameError:
+             current_app.logger.error("Cache invalidation function 'invalidate_disaster_api_cache' not found.")
+        except Exception as cache_err:
+            current_app.logger.error(f"Error during cache invalidation: {cache_err}", exc_info=True)
+
+    current_app.logger.info("run_fetchers_async finished.")

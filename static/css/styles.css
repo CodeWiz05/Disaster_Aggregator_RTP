@@ -183,13 +183,14 @@ footer {
     position: relative;
     height: 500px;
     margin-bottom: 2rem;
+    width: 100%;
 }
 
 #disaster-map {
-    height: 100%;
+    height: 100%; 
+    width: 100%;
     border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    z-index: 1;
 }
 
 .map-controls {
@@ -532,18 +533,33 @@ footer {
 
 .map-legend {
     position: absolute;
-    top: 10px; /* Adjust to place it nicely on the map */
-    right: 10px; /* Adjust the right side for a clean look */
-    background-color: rgba(255, 255, 255, 0.8); /* Semi-transparent background */
-    padding: 15px;
-    border-radius: 5px;
-    z-index: 10; /* Ensures it appears above the map */
+    top: 10px;
+    right: 10px;
+    background-color: rgba(255, 255, 255, 0.8);
+    padding: 10px;
+    border-radius: 4px;
+    z-index: 1000;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
 }
 
 .disasters-section {
     padding-top: 20px; /* Adds spacing above to prevent overlap */
     z-index: 5; /* Ensures it stays behind the map legend */
 }
+
+.legend-marker {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 5px;
+}
+
+.legend-marker.earthquake { background-color: #e53935; }
+.legend-marker.flood { background-color: #1e88e5; }
+.legend-marker.wildfire { background-color: #fb8c00; }
+.legend-marker.storm { background-color: #8e24aa; }
+.legend-marker.landslide { background-color: #6d4c41; }
 
 
 /* Responsive Design */

@@ -1,0 +1,128 @@
+--- START templates/login.html ---
+{% extends "base.html" %}
+
+{% block title %}Sign In - DisasterTrack{% endblock %}
+
+{% block styles %}
+<style>
+    .login-container {
+        max-width: 450px;
+        margin: 3rem auto;
+        padding: 2.5rem;
+        background-color: #fff;
+        border-radius: 8px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    }
+
+    .login-header {
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+
+    .login-header h2 {
+        font-size: 1.8rem;
+        color: #2c3e50;
+        margin-bottom: 0.5rem;
+    }
+
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .form-group label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        color: #34495e;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 0.8rem;
+        border: 1px solid #dfe6e9;
+        border-radius: 4px;
+        font-size: 1rem;
+    }
+
+    .form-check {
+        display: flex;
+        align-items: center;
+        margin-bottom: 1.5rem;
+    }
+
+    .form-check-input {
+        margin-right: 0.5rem;
+    }
+
+    .btn-login {
+        width: 100%;
+        padding: 0.9rem;
+        font-size: 1.1rem;
+        font-weight: 600;
+        background-color: var(--primary-color, #d32f2f); /* Use CSS var or default */
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background-color 0.3s;
+    }
+
+    .btn-login:hover {
+        background-color: var(--primary-dark, #b71c1c); /* Use CSS var or default */
+    }
+
+    .login-footer {
+        text-align: center;
+        margin-top: 1.5rem;
+        font-size: 0.9rem;
+    }
+
+    .login-footer a {
+        color: var(--secondary-color, #2196f3); /* Use CSS var or default */
+        font-weight: 500;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="login-container">
+    <div class="login-header">
+        <h2>Sign In</h2>
+    </div>
+
+    {# Display flashed messages specifically for login errors #}
+    {% with messages = get_flashed_messages(category_filter=['danger']) %}
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-danger">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    {# Note: This form doesn't use Flask-WTF, so no CSRF token here.
+       Consider adding Flask-WTF later for better security and validation. #}
+    <form method="POST" action="{{ url_for('main.login') }}">
+        {# If using Flask-WTF, you'd add form.hidden_tag() here #}
+        <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" class="form-control" required autofocus>
+        </div>
+        <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" class="form-control" required>
+        </div>
+        <div class="form-check">
+            <input type="checkbox" id="remember_me" name="remember_me" class="form-check-input">
+            <label for="remember_me" class="form-check-label">Remember Me</label>
+        </div>
+        <button type="submit" class="btn btn-login">Sign In</button>
+    </form>
+
+    <div class="login-footer">
+        <p>New User? <a href="{{ url_for('main.register') }}">Click to Register!</a></p>
+        {# Add forgot password link if needed later #}
+        {# <p><a href="#">Forgot Password?</a></p> #}
+    </div>
+</div>
+{% endblock %}
+--- END templates/login.html ---

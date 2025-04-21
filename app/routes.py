@@ -1,39 +1,375 @@
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
-from app.models import DisasterReport
-from app import db
-import json
-import os
+# app/routes.py
+from flask import (Blueprint, render_template, request, flash,
+                   redirect, url_for, jsonify, abort, current_app)
+from flask_login import login_required, current_user, login_user, logout_user # Import login/logout functions
+# Import extensions and helpers needed by routes
+from . import db, limiter, cache, invalidate_disaster_api_cache
+from .models import DisasterReport, Disaster, User
+# Import specific utils needed
+from .utils import sanitize_input, admin_required, find_or_create_disaster_event
+# Import for safe redirects
+from urllib.parse import urlparse, urljoin
 
 main_bp = Blueprint('main', __name__)
 
+# --- Homepage / Dashboard (Public) ---
 @main_bp.route('/')
+@main_bp.route('/index')
+# Login NOT required
 def index():
-    """Homepage with map and disaster data"""
-    return render_template('index.html', title='Disaster Tracker')
+    # Data is fetched by frontend JS via /api/disasters
+    return render_template('index.html', title='Live Dashboard')
 
-@main_bp.route('/report', methods=['GET', 'POST'])
-def report():
-    """Submit a disaster report"""
-    if request.method == 'POST':
-        # Handle form submission logic here
-        flash('Report submitted successfully! Under review.', 'success')
-        return redirect(url_for('main.index'))
-    return render_template('report_form.html', title='Submit Report')
-
-@main_bp.route('/verify')
-def verify():
-    """Admin panel for verifying user reports"""
-    return render_template('verify_panel.html', title='Verify Reports')
-
-@main_bp.route('/history')
-def history():
-    """Historical disaster data and analytics"""
-    return render_template('history.html', title='Historical Data')
-
+# --- API Endpoint for Frontend (Public) ---
 @main_bp.route('/api/disasters')
+@cache.memoize(timeout=180) # Cache results for 3 minutes
+@limiter.limit("100 per hour") # Limit API calls
+# Login NOT required
 def get_disasters():
-    """API endpoint to get disaster data for the map"""
-    data_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'cached_reports.json')
-    with open(data_file, 'r') as f:
-        disasters = json.load(f)
-    return jsonify(disasters)
+    """API endpoint to get verified disaster reports."""
+    # Log cache status only if needed for debugging, can be verbose
+    # print("Cache check for /api/disasters")
+    try:
+        # Log before querying
+        current_app.logger.debug("Querying database for verified disaster reports...")
+        # Query verified reports, newest first, limit results
+        reports = DisasterReport.query.filter_by(verified=True)\
+                                     .order_by(DisasterReport.timestamp.desc())\
+                                     .limit(200)\
+                                     .all()
+        # Log how many were found
+        report_count = len(reports)
+        current_app.logger.info(f"Found {report_count} verified reports in the database.")
+        # Convert to list of dictionaries
+        disasters_data = [r.to_dict() for r in reports]
+        current_app.logger.debug(f"Returning {len(disasters_data)} reports in API response.")
+        return jsonify(disasters_data)
+    except Exception as e:
+        current_app.logger.error(f"Error querying database for API: {e}", exc_info=True)
+        # Return a JSON error response for API clients
+        return jsonify(error="Error retrieving disaster data", message=str(e)), 500
+
+
+# --- User Report Submission (Login Required) ---
+@main_bp.route('/report', methods=['GET', 'POST'])
+@login_required # Login IS required
+def report():
+    """Handles user submission of disaster reports."""
+    # Keep track of form data to repopulate on error
+    form_data = request.form if request.method == 'POST' else {}
+
+    if request.method == 'POST':
+        # Apply rate limiting specifically to POST for this user
+        limit_key = f"report:{current_user.id}"
+        # Use limiter.check() to see if limit would be exceeded, though limiter handles 429 response automatically
+        if not limiter.check():
+             # This block might not be reached if limiter directly aborts with 429
+             # Depending on Flask-Limiter config, it might just return False here
+             # flash("Rate limit exceeded. Please wait before submitting again.", "warning")
+             # return render_template('report_form.html', title='Submit Report', form_data=form_data), 429
+             pass # Assume limiter handles the 429 response
+
+        try:
+            # Sanitize and retrieve form data
+            title = sanitize_input(request.form.get('title'))
+            description = sanitize_input(request.form.get('description'))
+            disaster_type = request.form.get('disaster_type')
+            latitude_str = request.form.get('latitude')
+            longitude_str = request.form.get('longitude')
+            severity_str = request.form.get('severity')
+
+            # Validation
+            errors = []
+            if not title: errors.append("Title is required.")
+            if not disaster_type: errors.append("Disaster type is required.")
+
+            latitude, longitude = None, None
+            try:
+                # Ensure lat/lon are provided before trying float conversion
+                if not latitude_str: raise ValueError("Latitude is required.")
+                latitude = float(latitude_str)
+                if not longitude_str: raise ValueError("Longitude is required.")
+                longitude = float(longitude_str)
+                # Basic range check for lat/lon
+                if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+                     raise ValueError("Latitude/Longitude out of valid range.")
+            except (ValueError, TypeError) as ve:
+                errors.append(f"Invalid location format or value: {ve}")
+
+            severity = None
+            if severity_str: # Severity might be optional
+                try:
+                    severity = int(severity_str)
+                    if not 1 <= severity <= 5:
+                        raise ValueError("Severity must be between 1 and 5.")
+                except (ValueError, TypeError):
+                    errors.append("Severity must be a whole number between 1 and 5.")
+            # Uncomment below if severity is required
+            # else: errors.append("Severity is required.")
+
+            if errors:
+                for error in errors: flash(error, 'danger')
+                # Pass form data back to template
+                return render_template('report_form.html', title='Submit Report', form_data=form_data), 400
+
+            # Create and save the report
+            new_report = DisasterReport(
+                title=title,
+                description=description,
+                disaster_type=disaster_type,
+                latitude=latitude,
+                longitude=longitude,
+                severity=severity,
+                source='UserReport',
+                verified=False, # User reports start unverified
+                user_id=current_user.id # Link to logged-in user
+            )
+            db.session.add(new_report)
+            db.session.commit()
+
+            flash('Report submitted successfully! Awaiting verification.', 'success')
+            return redirect(url_for('main.index'))
+
+        except Exception as e:
+            db.session.rollback() # Rollback on any error during processing
+            current_app.logger.error(f"Error saving user report for user {current_user.id}: {e}", exc_info=True)
+            flash('An error occurred while submitting your report. Please try again.', 'danger')
+            # Pass form data back
+            return render_template('report_form.html', title='Submit Report', form_data=form_data), 500
+
+    # GET request: Render the form page
+    return render_template('report_form.html', title='Submit Report', form_data={})
+
+
+# --- Admin Verification Panel (Login and Admin Required) ---
+@main_bp.route('/verify')
+@login_required # User must be logged in
+@admin_required # User must also be admin
+def verify():
+    """Admin panel to view and verify user-submitted reports."""
+    try:
+        # Fetch unverified reports submitted by users
+        reports_to_verify = DisasterReport.query.filter_by(
+            verified=False,
+            source='UserReport'
+            # Optionally add filter for status != 'spam' or 'rejected' if using status field
+        ).order_by(DisasterReport.timestamp.asc()).all() # Show oldest first
+
+        return render_template('verify_panel.html', title='Verify Reports', reports=reports_to_verify)
+    except Exception as e:
+        current_app.logger.error(f"Error fetching reports for verification: {e}", exc_info=True)
+        flash('Error loading verification panel.', 'danger')
+        return redirect(url_for('main.index'))
+
+
+# --- Process Verification Action (Login and Admin Required) ---
+@main_bp.route('/verify/<int:report_id>', methods=['POST'])
+@login_required # User must be logged in
+@admin_required # User must also be admin
+def process_verification(report_id):
+    """Handles the POST request from the verification panel (Verify/Reject/Spam)."""
+    # Use db.session.get for optimized primary key lookup
+    report = db.session.get(DisasterReport, report_id)
+    if not report:
+        flash(f'Report ID {report_id} not found.', 'error')
+        return redirect(url_for('main.verify'))
+    # Ensure it's a user report we are manually verifying
+    if report.source != 'UserReport':
+         flash(f'Report ID {report_id} is not a user report and cannot be manually processed here.', 'warning')
+         return redirect(url_for('main.verify'))
+
+    action = request.form.get('action') # e.g., 'verify', 'reject', 'spam' from form
+    needs_cache_invalidation = False
+
+    try:
+        if action == 'verify':
+            if not report.verified: # Only invalidate if status actually changes
+                needs_cache_invalidation = True
+            report.verified = True
+            # --- Attempt to link to or create a Disaster event ---
+            # find_or_create adds objects to session but doesn't commit
+            disaster_event = find_or_create_disaster_event(report)
+            if disaster_event:
+                 flash(f'Report {report_id} verified and linked/updated event {disaster_event.id}.', 'success')
+            else:
+                 flash(f'Report {report_id} verified, but could not be linked to an aggregate event.', 'warning')
+
+        elif action == 'reject':
+            if report.verified: # Only invalidate if status changes
+                 needs_cache_invalidation = True
+            report.verified = False # Mark as not verified
+            # Optional: Unlink from disaster event if needed
+            # if report.disaster_id: report.disaster_id = None
+            db.session.add(report) # Ensure change is tracked
+            flash(f'Report {report_id} marked as rejected.', 'warning')
+
+        elif action == 'spam':
+            if report.verified: # Only invalidate if status changes
+                 needs_cache_invalidation = True
+            report.verified = False
+            # Optional: Unlink from event
+            # if report.disaster_id: report.disaster_id = None
+            # Optional: Delete spam report entirely
+            # db.session.delete(report)
+            # flash(f'Report {report_id} marked as spam and deleted.', 'danger')
+            db.session.add(report) # Track change if only marking verified=False
+            flash(f'Report {report_id} marked as spam.', 'danger')
+        else:
+            flash('Invalid verification action specified.', 'error')
+            # No DB changes needed if action is invalid
+            return redirect(url_for('main.verify'))
+
+        # Commit all changes for this action transactionally
+        db.session.commit()
+        current_app.logger.info(f"Admin '{current_user.username}' performed action '{action}' on report {report_id}.")
+
+
+        # --- Invalidate API Cache only if verification status might have changed public data ---
+        if needs_cache_invalidation:
+             invalidate_disaster_api_cache()
+
+    except Exception as e:
+        db.session.rollback() # Rollback on any error during processing or commit
+        current_app.logger.error(f"Error processing verification action '{action}' for report {report_id}: {e}", exc_info=True)
+        flash('An error occurred during verification processing.', 'danger')
+
+    return redirect(url_for('main.verify'))
+
+
+# --- Historical Data Viewer (Public) ---
+@main_bp.route('/history')
+# Login NOT required
+def history():
+    """Displays historical verified disaster data."""
+    try:
+        # Show last 50 aggregated disaster events
+        # Consider adding pagination here for larger datasets
+        historical_events = Disaster.query.order_by(Disaster.start_time.desc()).limit(50).all()
+        # Use the summary dict for cleaner display in template
+        event_data = [event.to_summary_dict() for event in historical_events]
+        return render_template('history.html', title='Historical Data', events=event_data)
+    except Exception as e:
+         current_app.logger.error(f"Error fetching history: {e}", exc_info=True)
+         flash('Error loading historical data.', 'danger')
+         return redirect(url_for('main.index'))
+
+
+# --- Login Route ---
+@main_bp.route('/login', methods=['GET', 'POST'])
+# Login NOT required (it's the login page itself)
+def login():
+     """Handles user login."""
+     if current_user.is_authenticated:
+         # If already logged in, redirect to index
+         return redirect(url_for('main.index'))
+
+     if request.method == 'POST':
+         username = request.form.get('username')
+         password = request.form.get('password')
+         remember = request.form.get('remember_me') is not None
+
+         # Basic validation
+         if not username or not password:
+              flash('Username and password are required.', 'danger')
+              # Render form again, maybe pass username back?
+              return render_template('login.html', title='Sign In', username=username), 400
+
+         # Find user and check password
+         user = User.query.filter_by(username=username).first()
+         if user is None or not user.check_password(password):
+             flash('Invalid username or password.', 'danger')
+             # Render form again, maybe pass username back?
+             return render_template('login.html', title='Sign In', username=username), 401 # Unauthorized
+
+         # Log user in using Flask-Login
+         login_user(user, remember=remember)
+         current_app.logger.info(f"User '{username}' logged in successfully.")
+
+         # Handle redirect after login (to intended page or index)
+         next_page = request.args.get('next')
+         # Use the is_safe_url check to prevent open redirect vulnerability
+         if not next_page or not is_safe_url(next_page):
+             next_page = url_for('main.index')
+         flash('Login successful!', 'success')
+         return redirect(next_page)
+
+     # GET request: Show the login form
+     return render_template('login.html', title='Sign In')
+
+
+# --- Safe URL Check Function ---
+def is_safe_url(target):
+    """Checks if a redirect target URL is safe (same host)."""
+    ref_url = urlparse(request.host_url)
+    test_url = urlparse(urljoin(request.host_url, target))
+    # Allow only http and https schemes and ensure the target domain is the same as host
+    return test_url.scheme in ('http', 'https') and \
+           ref_url.netloc == test_url.netloc
+
+
+# --- Logout Route ---
+@main_bp.route('/logout')
+@login_required # User must be logged in to log out
+def logout():
+    """Logs the current user out."""
+    username = current_user.username # Get username before logging out
+    logout_user()
+    current_app.logger.info(f"User '{username}' logged out.")
+    flash('You have been successfully logged out.', 'info')
+    return redirect(url_for('main.index'))
+
+
+# --- Registration Route ---
+@main_bp.route('/register', methods=['GET', 'POST'])
+# Login NOT required
+def register():
+    """Handles new user registration."""
+    if current_user.is_authenticated:
+        return redirect(url_for('main.index'))
+
+    # Keep track of form data for repopulation
+    form_data = request.form if request.method == 'POST' else {}
+
+    if request.method == 'POST':
+        username = request.form.get('username')
+        email = request.form.get('email') # Consider adding email validation (e.g., using email-validator)
+        password = request.form.get('password')
+        password2 = request.form.get('password2')
+
+        # Validation
+        errors = []
+        if not username: errors.append('Username is required.')
+        if not email: errors.append('Email is required.')
+        if not password: errors.append('Password is required.')
+        if password != password2: errors.append('Passwords do not match.')
+
+        # Check uniqueness if basic validation passes
+        if not errors:
+            if User.query.filter_by(username=username).first():
+                errors.append('Username already taken. Please choose another.')
+            if User.query.filter_by(email=email).first():
+                errors.append('Email address already registered. Please use a different email or log in.')
+
+        if errors:
+             for error in errors: flash(error, 'danger')
+             return render_template('register.html', title='Register', form_data=form_data), 400
+        else:
+            # Create user if validation successful
+            try:
+                user = User(username=username, email=email)
+                user.set_password(password)
+                # Default role is 'user' as defined in the model
+                db.session.add(user)
+                db.session.commit()
+                current_app.logger.info(f"New user registered: '{username}'")
+                flash('Registration successful! Please log in.', 'success')
+                return redirect(url_for('main.login'))
+            except Exception as e:
+                 db.session.rollback()
+                 current_app.logger.error(f"Error during registration for {username}: {e}", exc_info=True)
+                 flash('An error occurred during registration. Please try again later.', 'danger')
+                 return render_template('register.html', title='Register', form_data=form_data), 500
+
+
+    # GET request: Show registration form
+    return render_template('register.html', title='Register', form_data={})

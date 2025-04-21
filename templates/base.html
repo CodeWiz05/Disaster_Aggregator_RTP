@@ -1,111 +1,137 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}DisasterTrack{% endblock %}</title>
+
+    {# --- Stylesheets --- #}
+    {# Fonts #}
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    {# Font Awesome Icons #}
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    {# Your Custom Stylesheet #}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
-    {% block extra_head %}{% endblock %}
+
+    {# --- Block for Page-Specific Styles/Head Elements --- #}
+    {% block styles %}{% endblock %}
+
 </head>
 <body>
+    {# --- Site Header --- #}
     <header class="site-header">
-        <div class="container header-container">
+        <div class="container header-container"> {# Assuming .container provides max-width and centering #}
             <div class="logo">
                 <a href="{{ url_for('main.index') }}">
                     <i class="fas fa-globe-americas"></i>
                     <span>DisasterTrack</span>
                 </a>
             </div>
-            <button class="mobile-menu-toggle" aria-label="Toggle navigation menu">
+            {# Mobile Menu Toggle Button (Ensure CSS handles its display/functionality) #}
+            <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false">
                 <span></span><span></span><span></span>
             </button>
-            <nav class="main-nav">
+            {# Main Navigation #}
+            <nav class="main-nav" id="main-navigation"> {# Added ID for easier JS targeting #}
                 <ul>
-                    <li><a href="{{ url_for('main.index') }}" class="nav-link {% if request.endpoint == 'main.index' %}active{% endif %}"><i class="fas fa-home"></i> Home</a></li>
-                    <li><a href="{{ url_for('main.report') }}" class="nav-link {% if request.endpoint == 'main.report' %}active{% endif %}"><i class="fas fa-exclamation-triangle"></i> Report</a></li>
-                    <li><a href="{{ url_for('main.history') }}" class="nav-link {% if request.endpoint == 'main.history' %}active{% endif %}"><i class="fas fa-chart-line"></i> History</a></li>
-                    <li><a href="{{ url_for('main.verify') }}" class="nav-link {% if request.endpoint == 'main.verify' %}active{% endif %}"><i class="fas fa-check-circle"></i> Verify</a></li>
+                    {# Use request.endpoint to determine active page #}
+                    <li class="{{ 'active' if request.endpoint == 'main.index' else '' }}"><a href="{{ url_for('main.index') }}" class="nav-link"><i class="fas fa-home"></i> Home</a></li>
+                    <li class="{{ 'active' if request.endpoint == 'main.report' else '' }}"><a href="{{ url_for('main.report') }}" class="nav-link"><i class="fas fa-exclamation-triangle"></i> Report</a></li>
+                    <li class="{{ 'active' if request.endpoint == 'main.history' else '' }}"><a href="{{ url_for('main.history') }}" class="nav-link"><i class="fas fa-chart-line"></i> History</a></li>
+
+                    {# --- Conditional Auth Links --- #}
+                    {% if current_user.is_authenticated %}
+                        {% if current_user.is_admin %}
+                            <li class="{{ 'active' if request.endpoint == 'main.verify' else '' }}"><a href="{{ url_for('main.verify') }}" class="nav-link"><i class="fas fa-check-circle"></i> Verify</a></li>
+                        {% endif %}
+                        <li><a href="{{ url_for('main.logout') }}" class="nav-link"><i class="fas fa-sign-out-alt"></i> Logout ({{ current_user.username }})</a></li>
+                    {% else %}
+                        <li class="{{ 'active' if request.endpoint == 'main.login' else '' }}"><a href="{{ url_for('main.login') }}" class="nav-link"><i class="fas fa-sign-in-alt"></i> Login</a></li>
+                        <li class="{{ 'active' if request.endpoint == 'main.register' else '' }}"><a href="{{ url_for('main.register') }}" class="nav-link"><i class="fas fa-user-plus"></i> Register</a></li>
+                    {% endif %}
+                    {# --- End Auth Links --- #}
                 </ul>
             </nav>
         </div>
     </header>
-    
-    <div class="flash-messages container">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }}">
-                        <i class="alert-icon fas fa-{% if category == 'success' %}check-circle{% elif category == 'danger' %}exclamation-circle{% elif category == 'warning' %}exclamation-triangle{% else %}info-circle{% endif %}"></i>
-                        <span>{{ message }}</span>
-                        <button class="alert-close" aria-label="Close alert"><i class="fas fa-times"></i></button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
+
+    {# --- Flash Messages --- #}
+    <div class="flash-messages-container container"> {# Wrapper container #}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                {# Use standard alert classes, ensure they exist in styles.css #}
+                {# Added data-dismiss attribute for standard JS handling #}
+                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                     <i class="alert-icon fas fa-{% if category == 'success' %}check-circle{% elif category == 'danger' %}exclamation-circle{% elif category == 'warning' %}exclamation-triangle{% else %}info-circle{% endif %}" style="margin-right: 0.5em;"></i>
+                    {{ message }}
+                    <button type="button" class="alert-close" data-dismiss="alert" aria-label="Close">
+                        <span aria-hidden="true">×</span>
+                    </button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
     </div>
-    
-    <main class="site-main">
+
+    {# --- Main Content Area --- #}
+    <main class="site-main container"> {# Added container class #}
         {% block content %}{% endblock %}
     </main>
-    
+
+    {# --- Site Footer --- #}
     <footer class="site-footer">
         <div class="container">
-            <div class="footer-content">
-                <div class="footer-logo">
-                    <i class="fas fa-globe-americas"></i>
-                    <span>DisasterTrack</span>
-                </div>
-                <div class="footer-links">
-                    <ul>
-                        <li><a href="#">About Us</a></li>
-                        <li><a href="#">API</a></li>
-                        <li><a href="#">Privacy Policy</a></li>
-                        <li><a href="#">Terms of Service</a></li>
-                        <li><a href="#">Contact</a></li>
-                    </ul>
-                </div>
-            </div>
-            <div class="footer-bottom">
-                <p>&copy; 2025 DisasterTrack. Real-time disaster monitoring and reporting.</p>
-                <div class="social-links">
-                    <a href="#" aria-label="Twitter"><i class="fab fa-twitter"></i></a>
-                    <a href="#" aria-label="Facebook"><i class="fab fa-facebook"></i></a>
-                    <a href="#" aria-label="Instagram"><i class="fab fa-instagram"></i></a>
-                    <a href="#" aria-label="GitHub"><i class="fab fa-github"></i></a>
-                </div>
-            </div>
+            <p id="footer-year">© DisasterTrack. All rights reserved.</p> {# Placeholder for year #}
+            {# Add other footer content if needed #}
         </div>
     </footer>
-    
+
+    {# --- Global JavaScript --- #}
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+    {# --- Block for Page-Specific Scripts --- #}
     {% block scripts %}{% endblock %}
+
+    {# --- Base Template JavaScript (e.g., mobile menu, flash close, dynamic year) --- #}
     <script>
-        // Mobile menu toggle
+        // Basic Mobile Menu Toggle
         document.addEventListener('DOMContentLoaded', function() {
-            // Mobile menu toggle
-            document.querySelector('.mobile-menu-toggle').addEventListener('click', function() {
-                document.querySelector('.main-nav').classList.toggle('active');
-                this.classList.toggle('active');
-            });
-            
-            // Alert close buttons
-            document.querySelectorAll('.alert-close').forEach(button => {
-                button.addEventListener('click', function() {
-                    this.closest('.alert').remove();
+            const menuToggle = document.querySelector('.mobile-menu-toggle');
+            const mainNav = document.getElementById('main-navigation'); // Use ID selector
+
+            if (menuToggle && mainNav) {
+                // Ensure mainNav has CSS rules for .active state (e.g., display: block)
+                menuToggle.addEventListener('click', function() {
+                    const isExpanded = menuToggle.getAttribute('aria-expanded') === 'true';
+                    mainNav.classList.toggle('active'); // Toggle nav visibility class
+                    menuToggle.setAttribute('aria-expanded', !isExpanded); // Toggle ARIA attribute
+                    menuToggle.classList.toggle('active'); // Toggle button active state (for styling)
                 });
-            });
-            
-            // Set active navigation link based on current page
-            const currentPath = window.location.pathname;
-            document.querySelectorAll('.nav-link').forEach(link => {
-                if (link.getAttribute('href') === currentPath) {
-                    link.classList.add('active');
+            } else {
+                 // console.warn("Mobile menu elements not found in base.html"); // Optional warning
+            }
+
+            // Basic dismiss for flash messages using data-dismiss attribute
+            document.querySelectorAll('.alert[data-dismiss="alert"]').forEach(function(alertElement) {
+                const closeButton = alertElement.querySelector('.alert-close');
+                if (closeButton) {
+                    closeButton.addEventListener('click', function() {
+                        // Add fade out effect if desired with CSS transitions
+                        alertElement.style.opacity = '0';
+                        setTimeout(() => alertElement.remove(), 300); // Remove after fade (adjust time)
+                    });
                 }
             });
+
+            // Set dynamic year in footer
+            const yearElement = document.getElementById('footer-year');
+            if (yearElement) {
+                yearElement.innerHTML = `© ${new Date().getFullYear()} DisasterTrack. All rights reserved.`;
+            }
         });
     </script>
 </body>

@@ -1,117 +1,147 @@
+
 {% extends "base.html" %}
 
 {% block title %}DisasterTrack - Real-time Disaster Monitoring{% endblock %}
 
-{% block extra_head %}
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.3/leaflet.css" />
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" />
+{% block styles %} {# Matches block name in base.html #}
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {# --- Leaflet CSS (Removed integrity/crossorigin) --- #}
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.3/leaflet.css" />
+    {# FontAwesome link (If needed specifically here, otherwise remove if in base) #}
+    {# <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" /> #}
+    {# Add any index-specific styles here if needed #}
+    <style>
+        /* Add specific styles for index elements if not in main styles.css */
+        .filters-panel.hidden { display: none; }
+        .data-wrapper.card-view .table-responsive { display: none; }
+        .data-wrapper.card-view .card-grid { display: grid; /* Or flex */ }
+        .data-wrapper.table-view .card-grid { display: none; }
+        .data-wrapper.table-view .table-responsive { display: block; }
+        .badge { /* Example badge style */ display: inline-block; padding: .25em .6em; font-size: 75%; font-weight: 700; line-height: 1; text-align: center; white-space: nowrap; vertical-align: baseline; border-radius: .25rem; }
+        .badge.earthquake { background-color: #e53935; color: white; } /* Match JS colors */
+        .badge.flood { background-color: #1e88e5; color: white; }
+        .badge.wildfire { background-color: #fb8c00; color: white; }
+        .badge.storm { background-color: #8e24aa; color: white; }
+        .badge.landslide { background-color: #6d4c41; color: white; }
+        .badge.other { background-color: #757575; color: white; }
+        .severity-indicator { /* Example style */ font-weight: bold; }
+        .loading-spinner { border: 4px solid #f3f3f3; border-top: 4px solid var(--secondary-color, #2196f3); border-radius: 50%; width: 25px; height: 25px; animation: spin 1s linear infinite; margin: 0 auto 0.5rem; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .loading-row td, .loading-overlay { text-align: center; color: #777; padding: 2rem; }
+        .card-grid { display: none; /* Hide initially if table is default */ /* Add grid styles */ }
+        .disaster-card { border: 1px solid #eee; border-radius: 4px; margin-bottom: 1rem; background: white; } /* Example */
+        .card-header { padding: 0.5rem 1rem; border-bottom: 1px solid #eee; }
+        .card-body { padding: 1rem; }
+        .card-footer { padding: 0.5rem 1rem; border-top: 1px solid #eee; text-align: right; }
+        .map-legend { /* Ensure style is defined */ position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.8); padding: 10px; border-radius: 5px; z-index: 1000; }
+        .map-legend ul { list-style: none; padding: 0; margin: 0; }
+        .map-legend li { margin-bottom: 3px; }
+        .legend-marker { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 5px; border: 1px solid rgba(0,0,0,0.2); }
+        .legend-marker.earthquake { background-color: #e53935; }
+        .legend-marker.flood { background-color: #1e88e5; }
+        .legend-marker.wildfire { background-color: #fb8c00; }
+        .legend-marker.storm { background-color: #8e24aa; }
+        .legend-marker.landslide { background-color: #6d4c41; }
+        .legend-marker.other { background-color: #757575; }
+    </style>
 {% endblock %}
 
+
 {% block content %}
+{# --- Hero Section --- #}
 <section class="hero-section">
     <div class="container">
         <div class="hero-content">
             <h1 class="hero-title">Real-time Disaster Monitoring</h1>
-            <p class="hero-description">Stay informed about natural disasters and emergencies happening around the world with our comprehensive tracking platform.</p>
+            <p class="hero-description">Stay informed about natural disasters and emergencies happening around the world.</p>
             <div class="hero-buttons">
                 <a href="#disaster-map-section" class="btn btn-primary">View Map</a>
                 <a href="{{ url_for('main.report') }}" class="btn btn-secondary">Report Event</a>
             </div>
         </div>
     </div>
-    <div class="hero-background">
-        <div class="hero-overlay"></div>
-    </div>
+    {# Add hero background elements if desired via CSS #}
 </section>
 
+{# --- Filters Section --- #}
 <section class="filters-section">
     <div class="container">
-        <div class="section-header">
-            <h2 class="section-title"><i class="fas fa-filter"></i> Filter Disasters</h2>
-            <button class="btn btn-sm btn-outline" id="toggle-filters">Show/Hide Filters</button>
-        </div>
-        
-        <div class="filters-panel">
-            <div class="filters-grid">
-                <div class="filter-group">
-                    <label for="filter-type">
-                        <i class="fas fa-tag"></i> Disaster Type
-                    </label>
-                    <select id="filter-type" class="form-control">
-                        <option value="all">All Types</option>
-                        <option value="earthquake">Earthquakes</option>
-                        <option value="flood">Floods</option>
-                        <option value="wildfire">Wildfires</option>
-                        <option value="storm">Storms</option>
-                        <option value="landslide">Landslides</option>
-                        <option value="other">Other</option>
-                    </select>
+        {# Use details/summary for accessible toggle #}
+        <details class="filter-details">
+             <summary class="filter-header">
+                 <h2 class="section-title"><i class="fas fa-filter"></i> Filter Disasters</h2>
+                 <button class="btn btn-sm btn-outline filter-toggle-btn" type="button">
+                     <i class="fas fa-chevron-down"></i> <span class="toggle-text">Show Filters</span>
+                 </button>
+             </summary>
+             <div class="filters-panel"> {# Content shown when details is open #}
+                 <div class="filters-grid">
+                    {# Type Filter #}
+                    <div class="filter-group">
+                        <label for="filter-type"><i class="fas fa-tag"></i> Type</label>
+                        <select id="filter-type" class="form-control">
+                            <option value="all" selected>All Types</option>
+                            <option value="earthquake">Earthquake</option>
+                            <option value="flood">Flood</option>
+                            <option value="wildfire">Wildfire</option>
+                            <option value="storm">Storm</option>
+                            <option value="landslide">Landslide</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    {# Severity Filter #}
+                    <div class="filter-group">
+                        <label for="filter-severity"><i class="fas fa-exclamation-circle"></i> Min Severity</label>
+                        <select id="filter-severity" class="form-control">
+                            <option value="1" selected>Any (1+)</option>
+                            <option value="2">Moderate (2+)</option>
+                            <option value="3">Significant (3+)</option>
+                            <option value="4">Severe (4+)</option>
+                            <option value="5">Extreme (5)</option>
+                        </select>
+                    </div>
+                    {# Time Period Filter #}
+                    <div class="filter-group">
+                        <label for="filter-days"><i class="far fa-calendar-alt"></i> Time Period</label>
+                        <select id="filter-days" class="form-control">
+                            <option value="1">Last 24 hours</option>
+                            <option value="7" selected>Last 7 days</option>
+                            <option value="30">Last 30 days</option>
+                            <option value="90">Last 90 days</option>
+                            <option value="0">All time</option>
+                        </select>
+                    </div>
+                    {# Region Filter (Placeholder) #}
+                    <div class="filter-group">
+                        <label for="filter-region"><i class="fas fa-globe"></i> Region</label>
+                        <select id="filter-region" class="form-control" disabled>
+                            <option value="all" selected>Worldwide</option>
+                            {# Add options later #}
+                        </select>
+                    </div>
                 </div>
-                
-                <div class="filter-group">
-                    <label for="filter-severity">
-                        <i class="fas fa-exclamation-circle"></i> Min Severity
-                    </label>
-                    <select id="filter-severity" class="form-control">
-                        <option value="1">Any (1+)</option>
-                        <option value="2">Moderate (2+)</option>
-                        <option value="3">Significant (3+)</option>
-                        <option value="4">Severe (4+)</option>
-                        <option value="5">Extreme (5)</option>
-                    </select>
-                </div>
-                
-                <div class="filter-group">
-                    <label for="filter-days">
-                        <i class="far fa-calendar-alt"></i> Time Period
-                    </label>
-                    <select id="filter-days" class="form-control">
-                        <option value="1">Last 24 hours</option>
-                        <option value="7" selected>Last 7 days</option>
-                        <option value="30">Last 30 days</option>
-                        <option value="90">Last 90 days</option>
-                        <option value="0">All time</option>
-                    </select>
-                </div>
-                
-                <div class="filter-group">
-                    <label for="filter-region">
-                        <i class="fas fa-globe"></i> Region
-                    </label>
-                    <select id="filter-region" class="form-control">
-                        <option value="all">Worldwide</option>
-                        <option value="americas">Americas</option>
-                        <option value="europe">Europe</option>
-                        <option value="asia">Asia</option>
-                        <option value="africa">Africa</option>
-                        <option value="oceania">Oceania</option>
-                    </select>
+                <div class="filters-actions">
+                    <button id="apply-filters" type="button" class="btn btn-primary"><i class="fas fa-check"></i> Apply Filters</button>
+                    <button id="reset-filters" type="button" class="btn btn-text"><i class="fas fa-undo"></i> Reset</button>
                 </div>
             </div>
-            
-            <div class="filters-actions">
-                <button id="apply-filters" class="btn btn-primary"><i class="fas fa-search"></i> Apply Filters</button>
-                <button id="reset-filters" class="btn btn-text"><i class="fas fa-undo"></i> Reset</button>
-            </div>
-        </div>
+        </details>
     </div>
 </section>
 
+{# --- Map Section --- #}
 <section class="map-section" id="disaster-map-section">
     <div class="container">
         <div class="section-header">
             <h2 class="section-title"><i class="fas fa-map-marked-alt"></i> Disaster Map</h2>
-            <div class="map-controls">
-                <button class="btn btn-sm btn-icon" id="zoom-in" title="Zoom in"><i class="fas fa-plus"></i></button>
-                <button class="btn btn-sm btn-icon" id="zoom-out" title="Zoom out"><i class="fas fa-minus"></i></button>
-                <button class="btn btn-sm btn-icon" id="reset-view" title="Reset view"><i class="fas fa-crosshairs"></i></button>
-            </div>
+            {# Assuming Leaflet default zoom controls are used #}
         </div>
-        
+        {# Container needs explicit height from CSS #}
         <div class="map-container">
-            <div id="disaster-map" class="w-full h-[500px] rounded-xl"></div>
-            <div class="map-legend absolute top-4 right-4 z-10 bg-white/80 p-4 rounded-lg shadow-md">
+            {# The map div - CSS must provide height #}
+            <div id="disaster-map"></div>
+            {# Map Legend #}
+            <div class="map-legend"> {# Ensure CSS styles this #}
                 <h4>Legend</h4>
                 <ul>
                     <li><span class="legend-marker earthquake"></span> Earthquake</li>
@@ -119,36 +149,41 @@
                     <li><span class="legend-marker wildfire"></span> Wildfire</li>
                     <li><span class="legend-marker storm"></span> Storm</li>
                     <li><span class="legend-marker landslide"></span> Landslide</li>
+                    <li><span class="legend-marker other"></span> Other</li>
                 </ul>
             </div>
         </div>
     </div>
 </section>
 
+{# --- Recent Disasters Section --- #}
 <section class="disasters-section">
     <div class="container">
         <div class="section-header">
             <h2 class="section-title"><i class="fas fa-list"></i> Recent Disasters</h2>
+            {# View toggle buttons - ensure JS/CSS handles this #}
             <div class="view-controls">
                 <button class="btn btn-sm btn-icon active" id="table-view" title="Table view"><i class="fas fa-table"></i></button>
                 <button class="btn btn-sm btn-icon" id="card-view" title="Card view"><i class="fas fa-th-large"></i></button>
             </div>
         </div>
-        
-        <div class="data-wrapper table-view">
+        {# Wrapper to toggle views #}
+        <div class="data-wrapper table-view"> {# Default to table view #}
             <div class="table-responsive">
-                <table class="data-table">
+                <table class="data-table"> {# Add styles for .data-table #}
                     <thead>
                         <tr>
-                            <th class="sortable" data-sort="title">Title <i class="fas fa-sort"></i></th>
-                            <th class="sortable" data-sort="type">Type <i class="fas fa-sort"></i></th>
-                            <th class="sortable" data-sort="severity">Severity <i class="fas fa-sort"></i></th>
-                            <th class="sortable" data-sort="time">Time <i class="fas fa-sort"></i></th>
-                            <th class="sortable" data-sort="location">Location <i class="fas fa-sort"></i></th>
+                            {# Add sorting indicators later if needed #}
+                            <th>Title</th>
+                            <th>Type</th>
+                            <th>Severity</th>
+                            <th>Time</th>
+                            <th>Location</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="disaster-rows">
+                        {# Initial loading state #}
                         <tr class="loading-row">
                             <td colspan="6">
                                 <div class="loading-spinner"></div>
@@ -158,514 +193,237 @@
                     </tbody>
                 </table>
             </div>
-            
             <div class="card-grid" id="disaster-cards" style="display: none;">
-                <!-- Cards will be populated by JavaScript -->
+                 {# Initial loading state for cards #}
                 <div class="loading-overlay">
-                    <div class="loading-spinner"></div>
-                    <p>Loading disaster data...</p>
-                </div>
+                     <div class="loading-spinner"></div>
+                     <p>Loading disaster data...</p>
+                 </div>
             </div>
-            
-            <div class="pagination-controls">
-                <button id="prev-page" class="btn btn-sm btn-icon" disabled><i class="fas fa-chevron-left"></i></button>
-                <span id="page-info">Page 1 of 1</span>
-                <button id="next-page" class="btn btn-sm btn-icon" disabled><i class="fas fa-chevron-right"></i></button>
-            </div>
+            {# Removed pagination controls for simplicity for now #}
+            {# <div class="pagination-controls"> ... </div> #}
         </div>
     </div>
 </section>
 
+{# --- Statistics Section --- #}
 <section class="stats-section">
     <div class="container">
-        <h2 class="section-title"><i class="fas fa-chart-pie"></i> Disaster Statistics</h2>
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-icon">
-                    <i class="fas fa-exclamation-triangle"></i>
-                </div>
-                <div class="stat-content">
-                    <h3>Total Active</h3>
-                    <div class="stat-value" id="stat-total">--</div>
-                </div>
-            </div>
-            
-            <div class="stat-card">
-                <div class="stat-icon">
-                    <i class="fas fa-fire"></i>
-                </div>
-                <div class="stat-content">
-                    <h3>Most Common</h3>
-                    <div class="stat-value" id="stat-common">--</div>
-                </div>
-            </div>
-            
-            <div class="stat-card">
-                <div class="stat-icon">
-                    <i class="fas fa-radiation"></i>
-                </div>
-                <div class="stat-content">
-                    <h3>Highest Severity</h3>
-                    <div class="stat-value" id="stat-severe">--</div>
-                </div>
-            </div>
-            
-            <div class="stat-card">
-                <div class="stat-icon">
-                    <i class="fas fa-clock"></i>
-                </div>
-                <div class="stat-content">
-                    <h3>Last 24 Hours</h3>
-                    <div class="stat-value" id="stat-new">--</div>
-                </div>
-            </div>
-        </div>
+         <h2 class="section-title"><i class="fas fa-chart-pie"></i> Disaster Statistics</h2>
+         <div class="stats-grid">
+            {# Stat Cards - ensure IDs match JS #}
+            <div class="stat-card"> <div class="stat-icon"><i class="fas fa-globe"></i></div> <div class="stat-content"><h3>Total Reported</h3><div class="stat-value" id="stat-total">--</div></div> </div>
+            <div class="stat-card"> <div class="stat-icon"><i class="fas fa-fire"></i></div> <div class="stat-content"><h3>Most Common</h3><div class="stat-value" id="stat-common">--</div></div> </div>
+            <div class="stat-card"> <div class="stat-icon"><i class="fas fa-biohazard"></i></div> <div class="stat-content"><h3>Highest Severity</h3><div class="stat-value" id="stat-severe">--</div></div> </div>
+            <div class="stat-card"> <div class="stat-icon"><i class="fas fa-clock"></i></div> <div class="stat-content"><h3>Last 7 Days</h3><div class="stat-value" id="stat-new">--</div></div> </div>
+         </div>
     </div>
 </section>
 {% endblock %}
 
+
 {% block scripts %}
+{# --- Load Leaflet JS Library FIRST - Removed integrity/crossorigin --- #}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.3/leaflet.js"></script>
+{# --- Load YOUR map logic SECOND --- #}
 <script src="{{ url_for('static', filename='js/map.js') }}"></script>
+
+{# --- Inline script for PAGE-SPECIFIC functions needed by map.js --- #}
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Initialize map
-        let map;
-        let currentPage = 1;
-        let totalPages = 1;
-        let disasterData = [];
-        let currentFilters = {
-            type: 'all',
-            severity: '1',
-            days: '7',
-            region: 'all'
-        };
-        
-        // Initialize map if the map element exists
-        const mapElement = document.getElementById('disaster-map');
-        if (mapElement) {
-            map = L.map('disaster-map').setView([20, 0], 2);
-            
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            }).addTo(map);
-            
-            // Map controls
-            document.getElementById('zoom-in').addEventListener('click', function() {
-                map.zoomIn();
-            });
-            
-            document.getElementById('zoom-out').addEventListener('click', function() {
-                map.zoomOut();
-            });
-            
-            document.getElementById('reset-view').addEventListener('click', function() {
-                map.setView([20, 0], 2);
-            });
+    // This script block runs AFTER map.js has loaded
+
+    // Helper Function: Basic HTML Sanitizer (needed for table/cards)
+    function sanitizeHtml(str) {
+        if (typeof str !== 'string') return '';
+        const temp = document.createElement('div');
+        temp.textContent = str; // Use browser's text setting to encode
+        return temp.innerHTML;
+    }
+
+    // Function to update the disaster table (called from map.js)
+    function updateDisasterTable(filteredDisasters) {
+        console.log("Updating disaster table in index.html with", filteredDisasters.length, "items");
+        const tableBody = document.getElementById('disaster-rows');
+        const cardsContainer = document.getElementById('disaster-cards');
+        const loadingRow = tableBody ? tableBody.querySelector('.loading-row') : null;
+        const loadingOverlay = cardsContainer ? cardsContainer.querySelector('.loading-overlay') : null;
+
+        // Clear previous content
+        if (tableBody) { while (tableBody.firstChild && tableBody.firstChild !== loadingRow) { tableBody.removeChild(tableBody.firstChild); } if(loadingRow) loadingRow.style.display = 'none'; }
+        if (cardsContainer) { while (cardsContainer.firstChild && cardsContainer.firstChild !== loadingOverlay) { cardsContainer.removeChild(cardsContainer.firstChild); } if(loadingOverlay) loadingOverlay.style.display = 'none'; }
+
+        // Handle empty results
+        if (!tableBody && !cardsContainer) { console.warn("Table/card elements not found."); return; }
+        if (filteredDisasters.length === 0) {
+            if (tableBody) { const row = document.createElement('tr'); row.innerHTML = '<td colspan="6" style="text-align: center; padding: 1rem;">No results match filters.</td>'; if (loadingRow) tableBody.insertBefore(row, loadingRow); else tableBody.appendChild(row); }
+            if (cardsContainer) { const msg = document.createElement('p'); msg.textContent = 'No results match filters.'; msg.style.textAlign = 'center'; msg.style.padding = '2rem'; if (loadingOverlay) cardsContainer.insertBefore(msg, loadingOverlay); else cardsContainer.appendChild(msg); }
+            return;
         }
-        
-        // Toggle filters panel with proper class handling
-        const filtersPanel = document.querySelector('.filters-panel');
-        document.getElementById('toggle-filters').addEventListener('click', function() {
-            if (filtersPanel.classList.contains('hidden')) {
-                filtersPanel.classList.remove('hidden');
-            } else {
-                filtersPanel.classList.add('hidden');
-            }
-        });
-        
-        // Toggle view (table/card)
-        document.getElementById('table-view').addEventListener('click', function() {
-            document.getElementById('table-view').classList.add('active');
-            document.getElementById('card-view').classList.remove('active');
-            document.querySelector('.data-wrapper').classList.add('table-view');
-            document.querySelector('.data-wrapper').classList.remove('card-view');
-            document.querySelector('.table-responsive').style.display = 'block';
-            document.getElementById('disaster-cards').style.display = 'none';
-        });
-        
-        document.getElementById('card-view').addEventListener('click', function() {
-            document.getElementById('card-view').classList.add('active');
-            document.getElementById('table-view').classList.remove('active');
-            document.querySelector('.data-wrapper').classList.add('card-view');
-            document.querySelector('.data-wrapper').classList.remove('table-view');
-            document.querySelector('.table-responsive').style.display = 'none';
-            document.getElementById('disaster-cards').style.display = 'grid';
-        });
-        
-        // Filter event listeners
-        document.getElementById('apply-filters').addEventListener('click', function() {
-            currentFilters = {
-                type: document.getElementById('filter-type').value,
-                severity: document.getElementById('filter-severity').value,
-                days: document.getElementById('filter-days').value,
-                region: document.getElementById('filter-region').value
-            };
-            currentPage = 1;
-            loadDisasterData();
-        });
-        
-        document.getElementById('reset-filters').addEventListener('click', function() {
-            document.getElementById('filter-type').value = 'all';
-            document.getElementById('filter-severity').value = '1';
-            document.getElementById('filter-days').value = '7';
-            document.getElementById('filter-region').value = 'all';
-            
-            currentFilters = {
-                type: 'all',
-                severity: '1',
-                days: '7',
-                region: 'all'
-            };
-            currentPage = 1;
-            loadDisasterData();
-        });
-        
-        // Pagination controls
-        document.getElementById('prev-page').addEventListener('click', function() {
-            if (currentPage > 1) {
-                currentPage--;
-                updateDisasterTable();
-                updatePaginationControls();
-            }
-        });
-        
-        document.getElementById('next-page').addEventListener('click', function() {
-            if (currentPage < totalPages) {
-                currentPage++;
-                updateDisasterTable();
-                updatePaginationControls();
-            }
-        });
-        
-        // Sortable columns
-        document.querySelectorAll('th.sortable').forEach(header => {
-            header.addEventListener('click', function() {
-                const sort = this.dataset.sort;
-                const icon = this.querySelector('i');
-                
-                // Reset other icons
-                document.querySelectorAll('th.sortable i').forEach(i => {
-                    i.className = 'fas fa-sort';
-                });
-                
-                // Set this icon based on sort direction
-                if (icon.classList.contains('fa-sort') || icon.classList.contains('fa-sort-down')) {
-                    icon.className = 'fas fa-sort-up';
-                    sortData(sort, 'asc');
-                } else {
-                    icon.className = 'fas fa-sort-down';
-                    sortData(sort, 'desc');
-                }
-            });
-        });
-        
-        // Sort data function
-        function sortData(field, direction) {
-            disasterData.sort((a, b) => {
-                let comparison = 0;
-                
-                switch(field) {
-                    case 'title':
-                        comparison = a.title.localeCompare(b.title);
-                        break;
-                    case 'type':
-                        comparison = a.type.localeCompare(b.type);
-                        break;
-                    case 'severity':
-                        comparison = a.severity - b.severity;
-                        break;
-                    case 'time':
-                        comparison = new Date(a.time) - new Date(b.time);
-                        break;
-                    case 'location':
-                        comparison = a.location.localeCompare(b.location);
-                        break;
-                }
-                
-                return direction === 'asc' ? comparison : -comparison;
-            });
-            
-            updateDisasterTable();
-        }
-        
-        // Load disaster data from API
-        function loadDisasterData() {
-            // In a real app, this would fetch data from an API
-            // For now, we'll simulate a delay and use placeholder data
-            
-            document.querySelector('.loading-row').style.display = 'table-row';
-            document.querySelector('.loading-overlay').style.display = 'flex';
-            
-            setTimeout(() => {
-                // Placeholder data
-                disasterData = [
-                    {
-                        id: 1,
-                        title: 'Coastal Flooding',
-                        type: 'flood',
-                        severity: 3,
-                        time: '2025-04-14T18:30:00',
-                        location: 'Miami, Florida, USA',
-                        lat: 25.7617,
-                        lng: -80.1918,
-                        description: 'Coastal flooding affecting several neighborhoods'
-                    },
-                    {
-                        id: 2,
-                        title: 'Forest Fire',
-                        type: 'wildfire',
-                        severity: 4,
-                        time: '2025-04-13T10:15:00',
-                        location: 'Northern California, USA',
-                        lat: 40.5865,
-                        lng: -122.3917,
-                        description: 'Large wildfire spreading in forest areas'
-                    },
-                    {
-                        id: 3,
-                        title: 'Magnitude 5.2 Earthquake',
-                        type: 'earthquake',
-                        severity: 3,
-                        time: '2025-04-12T23:45:00',
-                        location: 'Tokyo, Japan',
-                        lat: 35.6762,
-                        lng: 139.6503,
-                        description: 'Moderate earthquake with some structural damage reported'
-                    }
-                ];
-                
-                // Filter data based on current filters (in real app)
-                // ...
-                
-                totalPages = Math.ceil(disasterData.length / 10) || 1;
-                updateDisasterTable();
-                updatePaginationControls();
-                updateStatistics();
-                updateMap();
-                
-                document.querySelector('.loading-row').style.display = 'none';
-                document.querySelector('.loading-overlay').style.display = 'none';
-            }, 800);
-        }
-        
-        // Update disaster table with data
-        function updateDisasterTable() {
-            const tableBody = document.getElementById('disaster-rows');
-            const cardsContainer = document.getElementById('disaster-cards');
-            
-            // Clear existing content
-            while (tableBody.firstChild) {
-                if (tableBody.firstChild.classList && tableBody.firstChild.classList.contains('loading-row')) {
-                    break;
-                }
-                tableBody.removeChild(tableBody.firstChild);
-            }
-            
-            // Remove all cards except loading overlay
-            while (cardsContainer.firstChild) {
-                if (cardsContainer.firstChild.classList && cardsContainer.firstChild.classList.contains('loading-overlay')) {
-                    break;
-                }
-                cardsContainer.removeChild(cardsContainer.firstChild);
-            }
-            
-            // Calculate slice for pagination
-            const startIndex = (currentPage - 1) * 10;
-            const endIndex = startIndex + 10;
-            const pageData = disasterData.slice(startIndex, endIndex);
-            
-            // Add new rows and cards
-            pageData.forEach(disaster => {
-                // Create table row
+
+        // Populate table/cards
+        const pageData = filteredDisasters; // No pagination yet
+        pageData.forEach(disaster => {
+            const severity = disaster.severity || 1; const type = disaster.type || 'other';
+            const severityClass = `severity-${severity}`; const typeClass = type;
+            let formattedTime = 'N/A'; try { formattedTime = disaster.timestamp ? new Date(disaster.timestamp).toLocaleString(undefined, {dateStyle: 'short', timeStyle: 'short'}) : 'N/A'; } catch(e) {}
+            // Try to get place from description if location field is missing
+            const location = sanitizeHtml(disaster.location || disaster.description?.split('.')[0] || `[${disaster.lat?.toFixed(2)}, ${disaster.lng?.toFixed(2)}]`);
+
+            // Create table row
+            if (tableBody) {
                 const row = document.createElement('tr');
-                
-                const severityClass = `severity-${disaster.severity}`;
-                const typeClass = disaster.type;
-                
                 row.innerHTML = `
-                    <td>${disaster.title}</td>
-                    <td><span class="badge ${typeClass}">${disaster.type.charAt(0).toUpperCase() + disaster.type.slice(1)}</span></td>
-                    <td><span class="severity-indicator ${severityClass}">${disaster.severity}</span></td>
-                    <td>${formatDate(disaster.time)}</td>
-                    <td>${disaster.location}</td>
+                    <td>${sanitizeHtml(disaster.title || 'N/A')}</td>
+                    <td><span class="badge ${typeClass}">${sanitizeHtml(type.charAt(0).toUpperCase() + type.slice(1))}</span></td>
+                    <td><span class="severity-indicator ${severityClass}">${severity}</span></td>
+                    <td>${formattedTime}</td>
+                    <td>${location.substring(0, 50)}${location.length > 50 ? '...' : ''}</td> {# Truncate long locations #}
                     <td class="actions-cell">
-                        <button class="btn btn-sm btn-icon view-details" data-id="${disaster.id}" title="View details">
-                            <i class="fas fa-eye"></i>
-                        </button>
-                        <button class="btn btn-sm btn-icon share-event" data-id="${disaster.id}" title="Share">
-                            <i class="fas fa-share-alt"></i>
-                        </button>
-                    </td>
-                `;
-                
-                // Insert before loading row
-                if (tableBody.querySelector('.loading-row')) {
-                    tableBody.insertBefore(row, tableBody.querySelector('.loading-row'));
-                } else {
-                    tableBody.appendChild(row);
-                }
-                
-                // Create card
-                const card = document.createElement('div');
-                card.className = 'disaster-card';
-                card.innerHTML = `
-                    <div class="card-header ${typeClass}">
-                        <h3>${disaster.title}</h3>
-                        <span class="severity-indicator ${severityClass}">${disaster.severity}</span>
-                    </div>
-                    <div class="card-body">
-                        <p><i class="fas fa-map-marker-alt"></i> ${disaster.location}</p>
-                        <p><i class="far fa-clock"></i> ${formatDate(disaster.time)}</p>
-                        <p class="card-description">${disaster.description}</p>
-                    </div>
-                    <div class="card-footer">
-                        <button class="btn btn-sm view-details" data-id="${disaster.id}">
-                            <i class="fas fa-eye"></i> Details
-                        </button>
-                        <button class="btn btn-sm btn-icon share-event" data-id="${disaster.id}">
-                            <i class="fas fa-share-alt"></i>
-                        </button>
-                    </div>
-                `;
-                
-                // Insert before loading overlay
-                if (cardsContainer.querySelector('.loading-overlay')) {
-                    cardsContainer.insertBefore(card, cardsContainer.querySelector('.loading-overlay'));
-                } else {
-                    cardsContainer.appendChild(card);
-                }
-            });
-            
-            // Add event listeners to buttons
-            document.querySelectorAll('.view-details').forEach(button => {
-                button.addEventListener('click', function() {
-                    const id = this.getAttribute('data-id');
-                    viewDisasterDetails(id);
-                });
-            });
-            
-            document.querySelectorAll('.share-event').forEach(button => {
-                button.addEventListener('click', function() {
-                    const id = this.getAttribute('data-id');
-                    shareDisaster(id);
-                });
-            });
+                        <button class="btn btn-sm btn-icon view-details" data-id="${disaster.id || ''}" title="View details"><i class="fas fa-eye"></i></button>
+                        <button class="btn btn-sm btn-icon share-event" data-id="${disaster.id || ''}" title="Share"><i class="fas fa-share-alt"></i></button>
+                    </td>`;
+                if (loadingRow) tableBody.insertBefore(row, loadingRow); else tableBody.appendChild(row);
+            }
+
+            // Create card
+            if (cardsContainer) {
+                 const card = document.createElement('div');
+                 card.className = 'disaster-card';
+                 card.innerHTML = `
+                     <div class="card-header ${typeClass}"><h3>${sanitizeHtml(disaster.title || 'N/A')}</h3><span class="severity-indicator ${severityClass}">${severity}</span></div>
+                     <div class="card-body">
+                         <p><i class="fas fa-map-marker-alt"></i> ${location.substring(0, 50)}${location.length > 50 ? '...' : ''}</p>
+                         <p><i class="far fa-clock"></i> ${formattedTime}</p>
+                         <p class="card-description">${sanitizeHtml(disaster.description || '').substring(0,100)}...</p>
+                     </div>
+                     <div class="card-footer">
+                         <button class="btn btn-sm view-details" data-id="${disaster.id || ''}"><i class="fas fa-eye"></i> Details</button>
+                         <button class="btn btn-sm btn-icon share-event" data-id="${disaster.id || ''}"><i class="fas fa-share-alt"></i></button>
+                     </div>`;
+                  if (loadingOverlay) cardsContainer.insertBefore(card, loadingOverlay); else cardsContainer.appendChild(card);
+            }
+        });
+
+        // Attach listeners to newly added buttons
+        attachDetailAndShareListeners();
+    } // End updateDisasterTable
+
+    // Function to update statistics (called from map.js)
+    function updateStatistics(filteredDisasters) {
+        console.log("Updating statistics in index.html with", filteredDisasters.length, "items");
+        const totalEl = document.getElementById('stat-total');
+        const commonEl = document.getElementById('stat-common');
+        const severeEl = document.getElementById('stat-severe');
+        const newEl = document.getElementById('stat-new'); // Assumes this ID is for 'Last 7 Days' now
+
+        if (!totalEl || !commonEl || !severeEl || !newEl) { console.warn("Stat elements not found."); return; }
+
+        totalEl.textContent = filteredDisasters.length;
+        if (filteredDisasters.length > 0) {
+            const typeCounts = {};
+            filteredDisasters.forEach(d => { typeCounts[d.type] = (typeCounts[d.type] || 0) + 1; });
+            let mostCommonType = 'N/A'; let maxCount = 0;
+            for (const type in typeCounts) { if (typeCounts[type] > maxCount) { maxCount = typeCounts[type]; mostCommonType = type.charAt(0).toUpperCase() + type.slice(1); } }
+            commonEl.textContent = sanitizeHtml(mostCommonType);
+            let highestSeverity = filteredDisasters.reduce((max, d) => Math.max(max, d.severity || 0), 0);
+            severeEl.textContent = highestSeverity > 0 ? highestSeverity : 'N/A';
+            // Count for the default 7-day filter period
+            const cutoff = calculateCutoffDate(7); // Use helper from map.js scope? Or redefine here?
+            const recentEvents = filteredDisasters.filter(d => d.timestamp && new Date(d.timestamp) >= cutoff).length;
+            newEl.textContent = recentEvents;
+        } else {
+            commonEl.textContent = 'N/A'; severeEl.textContent = 'N/A'; newEl.textContent = 0;
         }
-        
-        // Update pagination controls
-        function updatePaginationControls() {
-            document.getElementById('page-info').textContent = `Page ${currentPage} of ${totalPages}`;
-            document.getElementById('prev-page').disabled = currentPage <= 1;
-            document.getElementById('next-page').disabled = currentPage >= totalPages;
+    } // End updateStatistics
+
+     // Helper to calculate cutoff date (can be defined here or assume map.js defines it globally)
+     function calculateCutoffDate(daysAgo) {
+         const cutoff = new Date();
+         cutoff.setDate(cutoff.getDate() - daysAgo);
+         cutoff.setHours(0, 0, 0, 0);
+         return cutoff;
+     }
+
+    // Helper to attach listeners to dynamic buttons
+    function attachDetailAndShareListeners() {
+         const dataArea = document.querySelector('.data-wrapper'); // Attach listener to wrapper
+         if (!dataArea) return;
+
+         // Remove previous listener to avoid duplicates if this is called multiple times
+         dataArea.removeEventListener('click', handleActionClick);
+         dataArea.addEventListener('click', handleActionClick);
+    } // End attachDetailAndShareListeners
+
+    // Single event handler for view/share buttons
+    function handleActionClick(event) {
+        const button = event.target.closest('button');
+        if (!button) return;
+
+        const id = button.getAttribute('data-id');
+        if (!id) return;
+
+        if (button.classList.contains('view-details')) {
+            // Ensure viewDisasterDetails (from map.js) is available in the global scope
+            if (typeof viewDisasterDetails === 'function') { viewDisasterDetails(id); }
+            else { console.error("viewDisasterDetails function not found."); }
+        } else if (button.classList.contains('share-event')) {
+            console.log(`Sharing event ${id} (placeholder)`);
+            alert(`Sharing for ID ${id} not implemented yet.`);
         }
-        
-        // Update map with markers
-        function updateMap() {
-            if (!map) return;
-            
-            // Clear existing markers
-            map.eachLayer(layer => {
-                if (layer instanceof L.Marker) {
-                    map.removeLayer(layer);
-                }
-            });
-            
-            // Add markers for each disaster
-            disasterData.forEach(disaster => {
-                const markerIcon = L.divIcon({
-                    className: `map-marker ${disaster.type}`,
-                    html: `<span>${disaster.severity}</span>`,
-                    iconSize: [30, 30]
-                });
-                
-                const marker = L.marker([disaster.lat, disaster.lng], { icon: markerIcon })
-                    .addTo(map)
-                    .bindPopup(`
-                        <div class="map-popup">
-                            <h4>${disaster.title}</h4>
-                            <p>${disaster.location}</p>
-                            <p>${formatDate(disaster.time)}</p>
-                            <button class="btn btn-sm popup-details" data-id="${disaster.id}">Details</button>
-                        </div>
-                    `);
-                
-                marker.on('popupopen', function() {
-                    const detailsBtn = document.querySelector(`.popup-details[data-id="${disaster.id}"]`);
-                    if (detailsBtn) {
-                        detailsBtn.addEventListener('click', function() {
-                            viewDisasterDetails(disaster.id);
-                        });
+    }
+
+
+    // --- Add event listeners for index.html specific elements AFTER DOM is ready ---
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log("Index.html specific DOMContentLoaded actions running.");
+
+        // Filter toggle using details/summary
+        const filterDetails = document.querySelector('.filter-details');
+        if(filterDetails) {
+            const summary = filterDetails.querySelector('summary');
+            if (summary) {
+                summary.addEventListener('click', (e) => {
+                    // Optional: Update button text if needed, details handles expand/collapse
+                    const toggleBtn = summary.querySelector('.filter-toggle-btn');
+                     if(toggleBtn) {
+                         setTimeout(() => { // Check state after browser updates open attribute
+                             const isOpen = filterDetails.open;
+                             const icon = toggleBtn.querySelector('i');
+                             const text = toggleBtn.querySelector('span');
+                             if(icon) icon.className = isOpen ? 'fas fa-chevron-up' : 'fas fa-chevron-down';
+                             if(text) text.textContent = isOpen ? 'Hide Filters' : 'Show Filters';
+                         }, 0);
                     }
                 });
-            });
-        }
-        
-        // Update statistics
-        function updateStatistics() {
-            document.getElementById('stat-total').textContent = disasterData.length;
-            
-            // Calculate most common type
-            const typeCounts = {};
-            disasterData.forEach(disaster => {
-                typeCounts[disaster.type] = (typeCounts[disaster.type] || 0) + 1;
-            });
-            
-            let mostCommonType = 'None';
-            let maxCount = 0;
-            
-            for (const type in typeCounts) {
-                if (typeCounts[type] > maxCount) {
-                    maxCount = typeCounts[type];
-                    mostCommonType = type.charAt(0).toUpperCase() + type.slice(1);
-                }
             }
-            
-            document.getElementById('stat-common').textContent = mostCommonType;
-            
-            // Calculate highest severity
-            let highestSeverity = disasterData.reduce((max, disaster) => 
-                Math.max(max, disaster.severity), 0);
-            
-            document.getElementById('stat-severe').textContent = highestSeverity || 'N/A';
-            
-            // Calculate events in last 24 hours
-            const oneDayAgo = new Date();
-            oneDayAgo.setDate(oneDayAgo.getDate() - 1);
-            
-            const recentEvents = disasterData.filter(disaster => 
-                new Date(disaster.time) >= oneDayAgo
-            ).length;
-            
-            document.getElementById('stat-new').textContent = recentEvents;
-        }
-        
-        // View disaster details function
-        function viewDisasterDetails(id) {
-            // In a real app, this would open a modal or navigate to a detail page
-            console.log(`Viewing details for disaster ID: ${id}`);
-            const disaster = disasterData.find(d => d.id == id);
-            
-            if (disaster) {
-                alert(`Disaster Details: ${disaster.title}\nLocation: ${disaster.location}\nType: ${disaster.type}\nSeverity: ${disaster.severity}\nTime: ${formatDate(disaster.time)}\nDescription: ${disaster.description}`);
-            }
-        }
-        
-        // Share disaster function
-        function shareDisaster(id) {
-            // In a real app, this would open a share dialog
-            console.log(`Sharing disaster ID: ${id}`);
-            alert(`Share functionality would be implemented here for disaster ID: ${id}`);
-        }
-        
-        // Format date helper function
-        function formatDate(dateString) {
-            const date = new Date(dateString);
-            return date.toLocaleString();
-        }
-        
-        // Initial data load
-        loadDisasterData();
-    });
+        } else { console.warn("Filter details/summary elements not found."); }
+
+        // View toggle buttons
+        const tableViewBtn = document.getElementById('table-view');
+        const cardViewBtn = document.getElementById('card-view');
+        const dataWrapper = document.querySelector('.data-wrapper');
+        if (tableViewBtn && cardViewBtn && dataWrapper) {
+             tableViewBtn.addEventListener('click', function() {
+                 if (!this.classList.contains('active')) {
+                     this.classList.add('active'); cardViewBtn.classList.remove('active');
+                     dataWrapper.classList.remove('card-view'); dataWrapper.classList.add('table-view');
+                 }
+             });
+             cardViewBtn.addEventListener('click', function() {
+                  if (!this.classList.contains('active')) {
+                     this.classList.add('active'); tableViewBtn.classList.remove('active');
+                     dataWrapper.classList.remove('table-view'); dataWrapper.classList.add('card-view');
+                 }
+             });
+             // Set initial view (e.g., table)
+             tableViewBtn.classList.add('active');
+        } else { console.warn("Table/Card view toggle elements not found."); }
+
+        // Other listeners (sorting, pagination placeholders)
+        // ...
+
+    }); // End index.html specific DOMContentLoaded
+
 </script>
+{# --- END Inline script --- #}
 {% endblock %}
