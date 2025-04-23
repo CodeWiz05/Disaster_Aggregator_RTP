@@ -223,16 +223,16 @@
 
 
 {% block scripts %}
-{# --- Load Leaflet JS Library FIRST - Removed integrity/crossorigin --- #}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.3/leaflet.js"></script>
+{# --- Load Leaflet JS Library FIRST --- #}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.3/leaflet.js"></script> {# Removed integrity/crossorigin #}
 {# --- Load YOUR map logic SECOND --- #}
 <script src="{{ url_for('static', filename='js/map.js') }}"></script>
 
 {# --- Inline script for PAGE-SPECIFIC functions needed by map.js --- #}
 <script>
-    // This script block runs AFTER map.js has loaded
+    // Define functions needed by map.js OR called locally within this script block
 
-    // Helper Function: Basic HTML Sanitizer (needed for table/cards)
+    // Helper Function: Basic HTML Sanitizer
     function sanitizeHtml(str) {
         if (typeof str !== 'string') return '';
         const temp = document.createElement('div');
@@ -240,11 +240,52 @@
         return temp.innerHTML;
     }
 
-    // Function to update the disaster table (called from map.js)
+    // Helper to calculate cutoff date (needed by updateStatistics if days aren't passed)
+    function calculateCutoffDate(daysAgo) {
+         const cutoff = new Date();
+         cutoff.setDate(cutoff.getDate() - daysAgo);
+         cutoff.setHours(0, 0, 0, 0);
+         return cutoff;
+    }
+
+     // Single event handler for view/share buttons (called by attachDetailAndShareListeners)
+    function handleActionClick(event) {
+        const button = event.target.closest('button');
+        if (!button) return;
+
+        const id = button.getAttribute('data-id');
+        if (!id) return;
+
+        if (button.classList.contains('view-details')) {
+            // Ensure viewDisasterDetails (from map.js) is available in the global scope
+            if (typeof viewDisasterDetails === 'function') {
+                viewDisasterDetails(id);
+            } else {
+                console.error("viewDisasterDetails function not found globally.");
+            }
+        } else if (button.classList.contains('share-event')) {
+            console.log(`Sharing event ${id} (placeholder)`);
+            alert(`Sharing for ID ${id} not implemented yet.`);
+        }
+    }
+
+    // Helper to attach listeners to dynamic buttons (called by updateDisasterTable)
+    function attachDetailAndShareListeners() {
+         const dataArea = document.querySelector('.data-wrapper'); // Attach listener to wrapper
+         if (!dataArea) { console.warn("Data wrapper not found for attaching listeners."); return; }
+
+         // Use event delegation on parent container
+         // Remove previous listener first to prevent duplicates if called multiple times
+         dataArea.removeEventListener('click', handleActionClick);
+         dataArea.addEventListener('click', handleActionClick);
+         console.log("Attached detail/share listeners to data wrapper.");
+    }
+
+    // --- Function to update the disaster table (called from map.js) ---
     function updateDisasterTable(filteredDisasters) {
         console.log("Updating disaster table in index.html with", filteredDisasters.length, "items");
         const tableBody = document.getElementById('disaster-rows');
-        const cardsContainer = document.getElementById('disaster-cards');
+        const cardsContainer = document.getElementById('disaster-cards'); // Assume cards exist too
         const loadingRow = tableBody ? tableBody.querySelector('.loading-row') : null;
         const loadingOverlay = cardsContainer ? cardsContainer.querySelector('.loading-overlay') : null;
 
@@ -253,68 +294,60 @@
         if (cardsContainer) { while (cardsContainer.firstChild && cardsContainer.firstChild !== loadingOverlay) { cardsContainer.removeChild(cardsContainer.firstChild); } if(loadingOverlay) loadingOverlay.style.display = 'none'; }
 
         // Handle empty results
-        if (!tableBody && !cardsContainer) { console.warn("Table/card elements not found."); return; }
+        if (!tableBody) { console.warn("Table body ('disaster-rows') not found."); return; } // Exit if no table
         if (filteredDisasters.length === 0) {
-            if (tableBody) { const row = document.createElement('tr'); row.innerHTML = '<td colspan="6" style="text-align: center; padding: 1rem;">No results match filters.</td>'; if (loadingRow) tableBody.insertBefore(row, loadingRow); else tableBody.appendChild(row); }
-            if (cardsContainer) { const msg = document.createElement('p'); msg.textContent = 'No results match filters.'; msg.style.textAlign = 'center'; msg.style.padding = '2rem'; if (loadingOverlay) cardsContainer.insertBefore(msg, loadingOverlay); else cardsContainer.appendChild(msg); }
+            const row = document.createElement('tr');
+            row.innerHTML = '<td colspan="6" style="text-align: center; padding: 1rem;">No disasters match the current filters.</td>';
+            if (loadingRow) tableBody.insertBefore(row, loadingRow); else tableBody.appendChild(row);
+            // Clear cards if they exist
+            if(cardsContainer) { cardsContainer.innerHTML = '<p style="text-align: center; padding: 2rem;">No disasters match filters.</p>'; }
             return;
         }
 
-        // Populate table/cards
-        const pageData = filteredDisasters; // No pagination yet
-        pageData.forEach(disaster => {
-            const severity = disaster.severity || 1; const type = disaster.type || 'other';
-            const severityClass = `severity-${severity}`; const typeClass = type;
-            let formattedTime = 'N/A'; try { formattedTime = disaster.timestamp ? new Date(disaster.timestamp).toLocaleString(undefined, {dateStyle: 'short', timeStyle: 'short'}) : 'N/A'; } catch(e) {}
-            // Try to get place from description if location field is missing
-            const location = sanitizeHtml(disaster.location || disaster.description?.split('.')[0] || `[${disaster.lat?.toFixed(2)}, ${disaster.lng?.toFixed(2)}]`);
+        // --- Populate Table Rows ---
+        filteredDisasters.forEach(disaster => { // Use 'disaster' as the iteration variable
+            // Define variables *inside* the loop scope
+            const severity = disaster.severity || 1;
+            const type = disaster.type || 'other';
+            const severityClass = `severity-${severity}`;
+            const typeClass = type;
+            let formattedTime = 'N/A';
+            try { formattedTime = disaster.timestamp ? new Date(disaster.timestamp).toLocaleString(undefined, {dateStyle: 'short', timeStyle: 'short'}) : 'N/A'; } catch(e) {}
+            // Use description or coordinates for location string
+            const locationString = disaster.location || disaster.description?.split('.')[0] || `[${disaster.lat?.toFixed(2)}, ${disaster.lng?.toFixed(2)}]`;
+            const titleString = disaster.title || 'N/A';
+            const disasterId = disaster.id || ''; // Handle potential missing ID
 
-            // Create table row
-            if (tableBody) {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${sanitizeHtml(disaster.title || 'N/A')}</td>
-                    <td><span class="badge ${typeClass}">${sanitizeHtml(type.charAt(0).toUpperCase() + type.slice(1))}</span></td>
-                    <td><span class="severity-indicator ${severityClass}">${severity}</span></td>
-                    <td>${formattedTime}</td>
-                    <td>${location.substring(0, 50)}${location.length > 50 ? '...' : ''}</td> {# Truncate long locations #}
-                    <td class="actions-cell">
-                        <button class="btn btn-sm btn-icon view-details" data-id="${disaster.id || ''}" title="View details"><i class="fas fa-eye"></i></button>
-                        <button class="btn btn-sm btn-icon share-event" data-id="${disaster.id || ''}" title="Share"><i class="fas fa-share-alt"></i></button>
-                    </td>`;
-                if (loadingRow) tableBody.insertBefore(row, loadingRow); else tableBody.appendChild(row);
-            }
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${sanitizeHtml(titleString)}</td>
+                <td><span class="badge ${typeClass}">${sanitizeHtml(type)}</span></td>
+                <td><span class="severity-indicator ${severityClass}">${severity}</span></td>
+                <td>${formattedTime}</td>
+                <td>${sanitizeHtml(locationString).substring(0, 60)}${locationString.length > 60 ? '...' : ''}</td> {# Truncate long locations #}
+                <td class="actions-cell">
+                    <button class="btn btn-sm btn-icon view-details" data-id="${disasterId}" title="View details"><i class="fas fa-eye"></i></button>
+                    <button class="btn btn-sm btn-icon share-event" data-id="${disasterId}" title="Share"><i class="fas fa-share-alt"></i></button>
+                </td>`;
+             if (loadingRow) tableBody.insertBefore(row, loadingRow); else tableBody.appendChild(row);
 
-            // Create card
-            if (cardsContainer) {
-                 const card = document.createElement('div');
-                 card.className = 'disaster-card';
-                 card.innerHTML = `
-                     <div class="card-header ${typeClass}"><h3>${sanitizeHtml(disaster.title || 'N/A')}</h3><span class="severity-indicator ${severityClass}">${severity}</span></div>
-                     <div class="card-body">
-                         <p><i class="fas fa-map-marker-alt"></i> ${location.substring(0, 50)}${location.length > 50 ? '...' : ''}</p>
-                         <p><i class="far fa-clock"></i> ${formattedTime}</p>
-                         <p class="card-description">${sanitizeHtml(disaster.description || '').substring(0,100)}...</p>
-                     </div>
-                     <div class="card-footer">
-                         <button class="btn btn-sm view-details" data-id="${disaster.id || ''}"><i class="fas fa-eye"></i> Details</button>
-                         <button class="btn btn-sm btn-icon share-event" data-id="${disaster.id || ''}"><i class="fas fa-share-alt"></i></button>
-                     </div>`;
-                  if (loadingOverlay) cardsContainer.insertBefore(card, loadingOverlay); else cardsContainer.appendChild(card);
-            }
-        });
+             // Add Card logic here if needed, using the same 'disaster' variable
+             if (cardsContainer) { /* ... create and append card using 'disaster' ... */ }
 
-        // Attach listeners to newly added buttons
+        }); // End forEach
+
+        // Attach listeners AFTER loop finishes and elements are in DOM
         attachDetailAndShareListeners();
+
     } // End updateDisasterTable
 
-    // Function to update statistics (called from map.js)
+    // --- Function to update statistics (called from map.js) ---
     function updateStatistics(filteredDisasters) {
         console.log("Updating statistics in index.html with", filteredDisasters.length, "items");
         const totalEl = document.getElementById('stat-total');
         const commonEl = document.getElementById('stat-common');
         const severeEl = document.getElementById('stat-severe');
-        const newEl = document.getElementById('stat-new'); // Assumes this ID is for 'Last 7 Days' now
+        const newEl = document.getElementById('stat-new');
 
         if (!totalEl || !commonEl || !severeEl || !newEl) { console.warn("Stat elements not found."); return; }
 
@@ -325,68 +358,34 @@
             let mostCommonType = 'N/A'; let maxCount = 0;
             for (const type in typeCounts) { if (typeCounts[type] > maxCount) { maxCount = typeCounts[type]; mostCommonType = type.charAt(0).toUpperCase() + type.slice(1); } }
             commonEl.textContent = sanitizeHtml(mostCommonType);
+
             let highestSeverity = filteredDisasters.reduce((max, d) => Math.max(max, d.severity || 0), 0);
             severeEl.textContent = highestSeverity > 0 ? highestSeverity : 'N/A';
-            // Count for the default 7-day filter period
-            const cutoff = calculateCutoffDate(7); // Use helper from map.js scope? Or redefine here?
+
+            // Use the correct cutoff date function
+            const cutoff = calculateCutoffDate(7); // Assuming 7 days for the stat
             const recentEvents = filteredDisasters.filter(d => d.timestamp && new Date(d.timestamp) >= cutoff).length;
-            newEl.textContent = recentEvents;
+            newEl.textContent = recentEvents; // Update the correct element ID if different
         } else {
             commonEl.textContent = 'N/A'; severeEl.textContent = 'N/A'; newEl.textContent = 0;
         }
     } // End updateStatistics
-
-     // Helper to calculate cutoff date (can be defined here or assume map.js defines it globally)
-     function calculateCutoffDate(daysAgo) {
-         const cutoff = new Date();
-         cutoff.setDate(cutoff.getDate() - daysAgo);
-         cutoff.setHours(0, 0, 0, 0);
-         return cutoff;
-     }
-
-    // Helper to attach listeners to dynamic buttons
-    function attachDetailAndShareListeners() {
-         const dataArea = document.querySelector('.data-wrapper'); // Attach listener to wrapper
-         if (!dataArea) return;
-
-         // Remove previous listener to avoid duplicates if this is called multiple times
-         dataArea.removeEventListener('click', handleActionClick);
-         dataArea.addEventListener('click', handleActionClick);
-    } // End attachDetailAndShareListeners
-
-    // Single event handler for view/share buttons
-    function handleActionClick(event) {
-        const button = event.target.closest('button');
-        if (!button) return;
-
-        const id = button.getAttribute('data-id');
-        if (!id) return;
-
-        if (button.classList.contains('view-details')) {
-            // Ensure viewDisasterDetails (from map.js) is available in the global scope
-            if (typeof viewDisasterDetails === 'function') { viewDisasterDetails(id); }
-            else { console.error("viewDisasterDetails function not found."); }
-        } else if (button.classList.contains('share-event')) {
-            console.log(`Sharing event ${id} (placeholder)`);
-            alert(`Sharing for ID ${id} not implemented yet.`);
-        }
-    }
 
 
     // --- Add event listeners for index.html specific elements AFTER DOM is ready ---
     document.addEventListener('DOMContentLoaded', function() {
         console.log("Index.html specific DOMContentLoaded actions running.");
 
-        // Filter toggle using details/summary
-        const filterDetails = document.querySelector('.filter-details');
+        // Ensure filter toggle elements exist before adding listener
+        const filterDetails = document.querySelector('.filter-details'); // Assuming you added this structure
         if(filterDetails) {
             const summary = filterDetails.querySelector('summary');
             if (summary) {
                 summary.addEventListener('click', (e) => {
-                    // Optional: Update button text if needed, details handles expand/collapse
+                    // Logic to update button text/icon based on open state
                     const toggleBtn = summary.querySelector('.filter-toggle-btn');
                      if(toggleBtn) {
-                         setTimeout(() => { // Check state after browser updates open attribute
+                         setTimeout(() => {
                              const isOpen = filterDetails.open;
                              const icon = toggleBtn.querySelector('i');
                              const text = toggleBtn.querySelector('span');
@@ -398,29 +397,17 @@
             }
         } else { console.warn("Filter details/summary elements not found."); }
 
-        // View toggle buttons
+        // View toggle buttons listener
         const tableViewBtn = document.getElementById('table-view');
         const cardViewBtn = document.getElementById('card-view');
         const dataWrapper = document.querySelector('.data-wrapper');
         if (tableViewBtn && cardViewBtn && dataWrapper) {
-             tableViewBtn.addEventListener('click', function() {
-                 if (!this.classList.contains('active')) {
-                     this.classList.add('active'); cardViewBtn.classList.remove('active');
-                     dataWrapper.classList.remove('card-view'); dataWrapper.classList.add('table-view');
-                 }
-             });
-             cardViewBtn.addEventListener('click', function() {
-                  if (!this.classList.contains('active')) {
-                     this.classList.add('active'); tableViewBtn.classList.remove('active');
-                     dataWrapper.classList.remove('table-view'); dataWrapper.classList.add('card-view');
-                 }
-             });
-             // Set initial view (e.g., table)
-             tableViewBtn.classList.add('active');
+            tableViewBtn.addEventListener('click', function() { /* ... table view logic ... */ });
+            cardViewBtn.addEventListener('click', function() { /* ... card view logic ... */ });
+            tableViewBtn.classList.add('active'); // Initial view
         } else { console.warn("Table/Card view toggle elements not found."); }
 
-        // Other listeners (sorting, pagination placeholders)
-        // ...
+        // Other listeners (sorting, pagination placeholders) ...
 
     }); // End index.html specific DOMContentLoaded
 

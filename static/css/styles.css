@@ -602,3 +602,160 @@ footer {
         margin: 5% auto;
     }
 }
+/* --- START Table Styling Improvements --- */
+
+.table-responsive {
+    overflow-x: auto; /* Allow horizontal scroll on small screens */
+    margin-top: 1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    border-radius: 4px;
+    border: 1px solid var(--border-color, #ddd);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: var(--card-bg, #fff);
+}
+
+.data-table th,
+.data-table td {
+    padding: 12px 15px; /* Increased padding */
+    text-align: left;
+    border-bottom: 1px solid var(--border-color, #ddd);
+    vertical-align: middle; /* Align cell content vertically */
+    white-space: nowrap; /* Prevent text wrapping initially */
+}
+
+/* Allow title and location to wrap if needed */
+.data-table th:first-child,
+.data-table td:first-child, /* Title */
+.data-table th:nth-child(5),
+.data-table td:nth-child(5) { /* Location */
+    white-space: normal;
+}
+
+
+.data-table th {
+    background-color: #f8f9fa; /* Lighter header */
+    font-weight: 600;
+    color: #495057;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.data-table tbody tr:nth-child(even) {
+     background-color: #fdfdfd; /* Subtle striping */
+}
+
+.data-table tbody tr:hover {
+    background-color: #f1f8ff; /* Highlight on hover */
+}
+
+/* --- Action Buttons Styling --- */
+.actions-cell {
+    text-align: right; /* Align buttons to the right */
+    white-space: nowrap; /* Prevent buttons wrapping */
+    width: 1%; /* Try to make this column only as wide as needed */
+}
+
+.actions-cell .btn-icon {
+    margin-left: 5px; /* Space between buttons */
+    padding: 6px 8px; /* Slightly smaller padding */
+    line-height: 1; /* Ensure icon aligns well */
+}
+
+.actions-cell .btn-icon i {
+    font-size: 0.9em; /* Adjust icon size if needed */
+}
+
+/* Example badge styles (if not already defined elsewhere) */
+.badge {
+    display: inline-block; padding: .25em .6em; font-size: 75%;
+    font-weight: 700; line-height: 1; text-align: center;
+    white-space: nowrap; vertical-align: baseline; border-radius: .25rem;
+    text-transform: capitalize;
+}
+.badge.earthquake { background-color: #e53935; color: white; }
+.badge.flood { background-color: #1e88e5; color: white; }
+.badge.wildfire { background-color: #fb8c00; color: white; }
+.badge.storm { background-color: #8e24aa; color: white; }
+.badge.landslide { background-color: #6d4c41; color: white; }
+.badge.other { background-color: #757575; color: white; }
+
+.severity-indicator {
+    font-weight: bold;
+    display: inline-block;
+    min-width: 1.5em; /* Ensure some width for alignment */
+    text-align: center;
+    border-radius: 3px;
+    padding: 2px 4px;
+    color: white;
+    font-size: 0.8rem;
+}
+.severity-indicator.severity-1 { background-color: #a5d6a7; color:#1b5e20; } /* Light Green */
+.severity-indicator.severity-2 { background-color: #fff59d; color:#f9a825; } /* Light Yellow */
+.severity-indicator.severity-3 { background-color: #ffcc80; color:#e65100; } /* Light Orange */
+.severity-indicator.severity-4 { background-color: #ffab91; color:#d84315; } /* Light Red */
+.severity-indicator.severity-5 { background-color: #ef9a9a; color:#b71c1c; } /* Red */
+
+
+/* --- END Table Styling Improvements --- */
+.register-container {
+    max-width: 480px;
+    margin: 3rem auto;
+    padding: 2.5rem;
+    background-color: var(--card-bg, #fff);
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.register-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.register-header h2 {
+    font-size: 1.8rem;
+    color: #2c3e50; /* Match login */
+    margin-bottom: 0.5rem;
+}
+
+/* Reuses .form-group, .form-control from login/report */
+/* No new styles needed if they already exist and are suitable */
+
+.btn-register {
+    width: 100%;
+    padding: 0.9rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+    background-color: var(--success, #4caf50); /* Green for register */
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    margin-top: 1rem; /* Space above button */
+}
+
+.btn-register:hover {
+    background-color: #388e3c; /* Darker green */
+}
+
+.register-footer {
+    text-align: center;
+    margin-top: 1.5rem;
+    font-size: 0.9rem;
+}
+
+.register-footer a {
+    color: var(--secondary-color, #2196f3); /* Blue link */
+    font-weight: 500;
+}
+
+/* Ensure alert styles are defined (likely already are) */
+.alert { }
+.alert-danger { }
+
+/* --- END Registration Page Styles --- */

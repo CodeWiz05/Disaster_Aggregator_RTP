@@ -1,0 +1,147 @@
+
+{% extends "base.html" %}
+
+{% block title %}Register - DisasterTrack{% endblock %}
+
+{% block styles %}
+{# Reuse login styles if applicable, or add specific registration styles #}
+<style>
+    .register-container { /* Changed class name */
+        max-width: 480px; /* Slightly wider maybe */
+        margin: 3rem auto;
+        padding: 2.5rem;
+        background-color: #fff;
+        border-radius: 8px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    }
+
+    .register-header { /* Changed class name */
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+
+    .register-header h2 {
+        font-size: 1.8rem;
+        color: #2c3e50;
+        margin-bottom: 0.5rem;
+    }
+
+    .form-group {
+        margin-bottom: 1.2rem; /* Slightly less margin maybe */
+    }
+
+    .form-group label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        color: #34495e;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 0.8rem;
+        border: 1px solid #dfe6e9;
+        border-radius: 4px;
+        font-size: 1rem;
+    }
+
+     .form-control:focus {
+        border-color: #3498db;
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.15);
+    }
+
+    .btn-register { /* Changed class name */
+        width: 100%;
+        padding: 0.9rem;
+        font-size: 1.1rem;
+        font-weight: 600;
+        background-color: var(--success, #4caf50); /* Use success color */
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background-color 0.3s;
+        margin-top: 1rem; /* Add margin above button */
+    }
+
+    .btn-register:hover {
+        background-color: #388e3c; /* Darker success */
+    }
+
+    .register-footer { /* Changed class name */
+        text-align: center;
+        margin-top: 1.5rem;
+        font-size: 0.9rem;
+    }
+
+    .register-footer a {
+        color: var(--secondary-color, #2196f3);
+        font-weight: 500;
+    }
+
+    .alert { /* Make sure alert styles are available */
+        padding: 0.75rem 1.25rem;
+        margin-bottom: 1rem;
+        border: 1px solid transparent;
+        border-radius: 0.25rem;
+    }
+     .alert-danger {
+        color: #721c24;
+        background-color: #f8d7da;
+        border-color: #f5c6cb;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="register-container">
+    <div class="register-header">
+        <h2>Create Account</h2>
+    </div>
+
+    {# Display validation errors flashed from the backend #}
+    {% with messages = get_flashed_messages(category_filter=['danger']) %}
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-danger">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    {# Use POST method, action points to the register route #}
+    <form method="POST" action="{{ url_for('main.register') }}">
+        {# Add CSRF token if using Flask-WTF: {{ form.hidden_tag() }} #}
+
+        <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" class="form-control"
+                   value="{{ form_data.get('username', '') }}" {# Repopulate on error #}
+                   required autofocus>
+        </div>
+
+        <div class="form-group">
+            <label for="email">Email Address</label>
+            <input type="email" id="email" name="email" class="form-control"
+                   value="{{ form_data.get('email', '') }}" {# Repopulate on error #}
+                   required>
+        </div>
+
+        <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" class="form-control" required>
+        </div>
+
+        <div class="form-group">
+            <label for="password2">Confirm Password</label>
+            <input type="password" id="password2" name="password2" class="form-control" required>
+        </div>
+
+        <button type="submit" class="btn btn-register">Register</button>
+    </form>
+
+    <div class="register-footer">
+        <p>Already have an account? <a href="{{ url_for('main.login') }}">Sign In!</a></p>
+    </div>
+</div>
+{% endblock %}
