@@ -10,6 +10,8 @@
     {# FontAwesome link (If needed specifically here, otherwise remove if in base) #}
     {# <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" /> #}
     {# Add any index-specific styles here if needed #}
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css"/>
     <style>
         /* Add specific styles for index elements if not in main styles.css */
         .filters-panel.hidden { display: none; }
@@ -238,7 +240,10 @@
 {% block scripts %}
 {# --- Load Leaflet JS Library FIRST --- #}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.3/leaflet.js"></script>
-{# --- Load YOUR map logic SECOND --- #}
+{# --- Load Leaflet MarkerCluster JS Library SECOND --- #}
+{# --- ENSURE THIS LINE IS PRESENT AND CORRECT --- #}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
+{# --- Load YOUR map logic THIRD --- #}
 <script src="{{ url_for('static', filename='js/map.js') }}"></script>
 
 {# --- Inline script for PAGE-SPECIFIC functions needed by map.js --- #}

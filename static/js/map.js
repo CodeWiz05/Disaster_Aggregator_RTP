@@ -34,82 +34,60 @@ console.log("Leaflet default icon path configured.");
 
 // --- Global Variables ---
 let disasterMap; // Initialize as undefined, will hold the Leaflet map instance
-let markerLayer = L.layerGroup(); // Layer group to manage markers efficiently
+let markerLayer = L.markerClusterGroup({chunkedLoading:true, maxClusterRadius: 80, spiderfyOnMaxZoom: true, showCoverageOnHover: true, zoomToBoundsOnClick: true}); // Layer group to manage markers efficiently
 let disasters = []; // Store raw data fetched from API
 let currentFilteredDisasters = []; // Store data currently displayed after filtering
 
-// --- Map Initialization Function ---
+// --- REVISED initMap Function for Horizontal Wrapping ---
 function initMap() {
-    console.log("Attempting to initialize map...");
+    console.log("Initializing map for horizontal wrapping...");
     const mapContainer = document.getElementById('disaster-map');
-    if (!mapContainer) {
-        console.error("Map container 'disaster-map' not found during init.");
-        return false; // Indicate initialization failure
-    }
-    // Check if container has rendered size (basic check)
-    if (mapContainer.offsetHeight === 0 || mapContainer.offsetWidth === 0) {
-         console.warn("Map container has zero height or width during init. Check CSS. Retrying might be needed.");
-         // Returning true here allows the retry logic in DOMContentLoaded to proceed,
-         // hoping invalidateSize will fix it later. Could return false if preferred.
-    }
-     // Prevent re-initialization if map already exists
-    if (disasterMap instanceof L.Map) {
-        console.warn("Map is already initialized. Skipping re-initialization.");
-        return true;
-    }
+    if (!mapContainer) { console.error("Map container not found."); return false; }
+    if (disasterMap instanceof L.Map) { console.warn("Map already initialized."); return true; } // Prevent re-init
 
     try {
-        // Create the Leaflet map instance
         disasterMap = L.map(mapContainer, {
-            center: [20, 0], // Initial geographical center
-            zoom: 2,         // Initial zoom level
-            minZoom: 2,      // Minimum zoom level allowed
-            maxZoom: 18,     // Maximum zoom level allowed
-            maxBounds: [[-85.05112878, -180.0], [85.05112878, 180.0]], // Limit panning
-            maxBoundsViscosity: 1.0, // Make bounds solid
-            worldCopyJump: false     // Prevent map repeating horizontally
+            center: [20, 0],
+            // --- Set desired zoom levels ---
+            zoom: 2,      // Initial zoom
+            minZoom: 2,   // Allow zooming out this far (adjust 1 or 2)
+            maxZoom: 18,  // Max zoom in
+            // --- REMOVE maxBounds and maxBoundsViscosity to allow infinite panning ---
+            // maxBounds: [[-85.05112878, -180.0], [85.05112878, 180.0]],
+            // maxBoundsViscosity: 1.0,
+            // --- Ensure worldCopyJump is TRUE (Leaflet default) ---
+            worldCopyJump: true // This enables the wrapping behavior
         });
 
-        // Add the OpenStreetMap tile layer
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-            noWrap: true,      // Prevent tiles repeating horizontally
-            minZoom: 2,
-            maxZoom: 18,
-            bounds: [[-90, -180],[90, 180]] // Constrain tile loading
+            // --- REMOVE noWrap and bounds to allow tile wrapping ---
+            // noWrap: true,
+            minZoom: 2, // Match map's minZoom
+            maxZoom: 18
+            // bounds: [[-90, -180],[90, 180]]
         }).addTo(disasterMap);
 
-        // Add the marker layer group (markers will be added here later)
         markerLayer.addTo(disasterMap);
-        // Add the scale control to the map
         L.control.scale().addTo(disasterMap);
+        console.log("Map initialized with wrapping ENABLED.");
 
-        console.log("Map initialized successfully with zoom constraints.");
+        attachZoomListeners(); // Attach custom zoom button listeners if used
 
-        // Attach listeners for custom zoom buttons (if they exist on the page)
-        attachZoomListeners();
-
-        // Call invalidateSize shortly after initialization as good practice
-        // This helps if the container size wasn't fully ready initially
+        // InvalidateSize is still good practice after init
         setTimeout(() => {
-            if (disasterMap) {
-                 console.log("Running invalidateSize() shortly after init.");
-                 disasterMap.invalidateSize(); // Force map to recalculate its size
-            }
-        }, 50); // 50ms delay
+            if (disasterMap) { disasterMap.invalidateSize(); }
+        }, 50);
 
-        return true; // Indicate successful initialization
+        return true; // Success
 
     } catch(e) {
-        console.error("Critical error during L.map() or L.tileLayer() initialization:", e);
-        // Clean up if partial init happened before error
-        if (disasterMap) {
-             try { disasterMap.remove(); } catch (removeErr) { console.error("Error removing partially initialized map:", removeErr); }
-             disasterMap = undefined; // Reset global variable
-        }
-        return false; // Indicate initialization failure
+        console.error("Error during L.map() or L.tileLayer() initialization:", e);
+        if (disasterMap) { try { disasterMap.remove(); } catch (removeErr) {} disasterMap = undefined; }
+        return false; // Failure
     }
-} // End initMap
+}
+// --- End REVISED initMap ---
 
 // --- Helper to attach zoom listeners ---
 function attachZoomListeners() {
@@ -174,33 +152,56 @@ function loadDisasterData() {
                 console.log(`Fetched ${disasters.length} reports. First report:`, disasters.length > 0 ? JSON.stringify(disasters[0]) : 'N/A');
             }
 
-            // Apply filtering based on current filter values
-            const cutoff = (daysFilter > 0) ? calculateCutoffDate(daysFilter) : null;
-            currentFilteredDisasters = disasters.filter(d => { // Start filter callback
+             // Apply Filtering
+             const cutoff = (daysFilter > 0) ? calculateCutoffDate(daysFilter) : null;
+             // --- START DATE DEBUG LOGGING ---
+             console.log("Cutoff Date for filtering:", cutoff ? cutoff.toISOString() : "None");
+             let reportsChecked = 0;
+             let reportsKeptByTime = 0;
+             // --- END DATE DEBUG LOGGING ---
+             currentFilteredDisasters = disasters.filter(d => {
                 let keep = true;
-                // Apply Type filter
-                if (typeFilter !== 'all' && d.type !== typeFilter) {
-                    keep = false;
-                }
-                // Apply Severity filter
-                if (keep && severityFilter > 1) {
-                    if (typeof d.severity !== 'number' || d.severity < severityFilter) {
-                         keep = false;
-                    }
-                }
-                // Apply Days filter
+                reportsChecked++; // Increment for every report checked
+
+                // Type filter
+                if (typeFilter !== 'all' && d.type !== typeFilter) { keep = false; }
+                // Severity filter
+                if (keep && severityFilter > 1) { if (typeof d.severity !== 'number' || d.severity < severityFilter) { keep = false; } }
+                // Days filter
                 if (keep && cutoff) {
+                    let reportDate = null;
+                    let isValidDate = false;
                     try {
-                        if (!d.timestamp || !(new Date(d.timestamp) >= cutoff)) {
-                            keep = false;
+                        reportDate = new Date(d.timestamp); // Try parsing
+                        isValidDate = !isNaN(reportDate.getTime()); // Check if valid date object
+                        if (!isValidDate) {
+                            throw new Error("Parsed Date is Invalid");
+                        }
+                        // --- Compare Dates ---
+                        if (!(reportDate >= cutoff)) {
+                             keep = false;
+                        } else {
+                             reportsKeptByTime++; // Count if kept by time filter
+                        }
+                        // --- Log comparison for the first few ---
+                        if(reportsChecked <= 10) { // Log first 10 checks
+                             console.log(`  Report ID ${d.id}, Time: ${d.timestamp}, Parsed: ${reportDate.toISOString()}, Keep (Time)? ${reportDate >= cutoff}`);
                         }
                     } catch (e) {
-                        console.warn(`Invalid timestamp for disaster ID ${d.id}: ${d.timestamp}. Excluding.`);
-                        keep = false; // Exclude if timestamp is invalid
+                        console.warn(`Invalid timestamp for ID ${d.id}: "${d.timestamp}". Excluding. Error: ${e.message}`);
+                        keep = false;
                     }
+                } else if (keep && !cutoff) {
+                     reportsKeptByTime++; // Keep if no time filter applied
                 }
                 return keep;
-            }); // End filter callback
+            });
+
+            // --- Log final time filter count ---
+            console.log(`Total reports checked: ${reportsChecked}. Reports kept after time filter (or no time filter): ${reportsKeptByTime}`);
+            console.log(`Final filtered count (all filters): ${currentFilteredDisasters.length}`);
+            // --- End final log ---
+
 
             console.log(`Filtered down to ${currentFilteredDisasters.length} reports.`);
             console.log('First few filtered reports:', currentFilteredDisasters.slice(0, 5));
@@ -372,12 +373,13 @@ function addMarkersToMap(dataToAdd) {
      }
 
      let markersAddedCount = 0;
+     let markersToCluster = [];
      dataToAdd.forEach(disaster => { // Loop through the filtered data
         // console.log(`Processing disaster ID ${disaster.id || 'N/A'} for marker.`); // Uncomment for deep debug
         const marker = createDisasterMarker(disaster); // Create marker object
         if (marker) { // If marker was created successfully
             try {
-                markerLayer.addLayer(marker); // Add it to the layer group
+                markersToCluster.push(marker); // Add it to the layer group
                 markersAddedCount++;
             } catch(e) {
                 // Log error if adding to layer fails
@@ -387,7 +389,14 @@ function addMarkersToMap(dataToAdd) {
              console.warn(`Marker creation failed for disaster ID ${disaster.id || 'N/A'}, not adding to map.`);
         }
      }); // End forEach
-
+     
+     if (markersToCluster.length > 0) {
+        console.log(`Adding ${markersToCluster.length} markers to MarkerClusterGroup...`);
+        markerLayer.addLayers(markersToCluster); // More efficient bulk add
+        console.log(`Successfully added ${markersAddedCount} markers to the cluster group.`);
+     } else {
+         console.log("No valid markers created to add to the cluster group.");
+     }
      console.log(`Successfully added ${markersAddedCount} markers to the map layer.`);
 } // End addMarkersToMap
 

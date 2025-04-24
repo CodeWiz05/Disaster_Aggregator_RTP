@@ -34,6 +34,7 @@ class BaseConfig:
     USGS_API_KEY = os.environ.get('USGS_API_KEY')
     GDACS_API_KEY = os.environ.get('GDACS_API_KEY')
     GOOGLE_MAPS_API_KEY = os.environ.get('GOOGLE_MAPS_API_KEY')
+    NASA_FIRMS_API_KEY = os.environ.get('NASA_FIRMS_API_KEY')
 
     # Email configuration (using uppercase standard Flask-Mail keys)
     MAIL_SERVER = os.environ.get('MAIL_SERVER')

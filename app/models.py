@@ -2,6 +2,7 @@
 from datetime import datetime, timezone
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
+from flask import current_app
 from app import db, login # login is needed for the user_loader
 
 # Optional: If using PostGIS for better location querying
@@ -68,6 +69,27 @@ class DisasterReport(db.Model):
         return f'<Report {self.id}: {self.title} ({self.source} - {verified_status})>'
 
     def to_dict(self):
+        ts_iso = None
+        if self.timestamp:
+            try:
+                # Ensure the timestamp is treated as UTC and formatted correctly
+                # If stored correctly as DateTime(timezone=True), it should have tzinfo
+                if self.timestamp.tzinfo is None:
+                     # If somehow timezone info was lost, assume UTC
+                     ts_utc = self.timestamp.replace(tzinfo=timezone.utc)
+                else:
+                     # Convert to UTC just to be sure before formatting
+                     ts_utc = self.timestamp.astimezone(timezone.utc)
+
+                # Format as ISO 8601 with 'Z' for UTC
+                ts_iso = ts_utc.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+                # Or simpler if microseconds aren't critical and stored value IS UTC:
+                # ts_iso = self.timestamp.strftime('%Y-%m-%dT%H:%M:%SZ')
+
+            except Exception as e:
+                 # Log error if formatting fails
+                 current_app.logger.warning(f"Could not format timestamp for report {self.id}: {e}")
+                 pass # Leave as None
         return {
             'id': self.id,
             'type': self.disaster_type,
@@ -75,7 +97,7 @@ class DisasterReport(db.Model):
             'description': self.description,
             'lat': self.latitude,
             'lng': self.longitude,
-            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
+            'timestamp': ts_iso,
             'severity': self.severity,
             'verified': self.verified,
             'source': self.source,

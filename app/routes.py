@@ -1,17 +1,22 @@
-# app/routes.py
+# app/routes.py - Replace the entire get_disasters function AGAIN (v3)
+
+# --- Ensure these imports are at the top of routes.py ---
 from flask import (Blueprint, render_template, request, flash,
                    redirect, url_for, jsonify, abort, current_app)
-from flask_login import login_required, current_user, login_user, logout_user # Import login/logout functions
-# Import extensions and helpers needed by routes
+from flask_login import login_required, current_user, login_user, logout_user
 from . import db, limiter, cache, invalidate_disaster_api_cache
 from .models import DisasterReport, Disaster, User
-# Import specific utils needed
 from .utils import sanitize_input, admin_required, find_or_create_disaster_event
-# Import for safe redirects
 from urllib.parse import urlparse, urljoin
+from sqlalchemy import func, select, desc
+from sqlalchemy.orm import aliased
+# -------------------------------------------------------
 
+# Keep main_bp definition
 main_bp = Blueprint('main', __name__)
 
+# Keep other routes (index, etc.)
+# Keep other routes (index, etc.)
 # --- Homepage / Dashboard (Public) ---
 @main_bp.route('/')
 @main_bp.route('/index')
@@ -20,35 +25,76 @@ def index():
     # Data is fetched by frontend JS via /api/disasters
     return render_template('index.html', title='Live Dashboard')
 
-# --- API Endpoint for Frontend (Public) ---
+# --- API Endpoint (RE-VERIFIED v3 - Top N per Type with Explicit Join) ---
 @main_bp.route('/api/disasters')
-@cache.memoize(timeout=180) # Cache results for 3 minutes
-@limiter.limit("100 per hour") # Limit API calls
-# Login NOT required
+@cache.memoize(timeout=180)
+@limiter.limit("100 per hour")
 def get_disasters():
-    """API endpoint to get verified disaster reports."""
-    # Log cache status only if needed for debugging, can be verbose
-    # print("Cache check for /api/disasters")
+    """
+    API endpoint to get the latest N (e.g., 100) verified disaster reports
+    for EACH disaster type. Uses explicit join to avoid Cartesian warning.
+    """
+    current_app.logger.info("Received request for /api/disasters (Top N per type - Explicit Join v3)")
+    N = 100 # Number of latest reports per type to fetch
+
     try:
-        # Log before querying
-        current_app.logger.debug("Querying database for verified disaster reports...")
-        # Query verified reports, newest first, limit results
-        reports = DisasterReport.query.filter_by(verified=True)\
-                                     .order_by(DisasterReport.timestamp.desc())\
-                                     .limit(200)\
-                                     .all()
-        # Log how many were found
-        report_count = len(reports)
-        current_app.logger.info(f"Found {report_count} verified reports in the database.")
+        current_app.logger.debug(f"Querying database for top {N} verified reports per type...")
+
+        # --- START SQLAlchemy Window Function Query ---
+
+        # 1. Define the window function
+        row_number_window = func.row_number().over(
+            partition_by=DisasterReport.disaster_type,
+            order_by=desc(DisasterReport.timestamp)
+        ).label('row_num')
+
+        # 2. Create a subquery selecting the ID and the row number
+        #    selecting FROM DisasterReport itself (no alias needed here yet)
+        subq = select(
+                   DisasterReport.id, # Select the primary key directly
+                   row_number_window  # Select the calculated row number
+               )\
+               .filter(DisasterReport.verified == True)\
+               .subquery('ranked_reports') # Name the subquery
+
+        # 3. Select the full DisasterReport object, joining ON the subquery's ID
+        #    and filtering by the subquery's row number.
+        query = select(DisasterReport)\
+                .join(subq, DisasterReport.id == subq.c.id)\
+                .filter(subq.c.row_num <= N)\
+                .order_by(DisasterReport.disaster_type, desc(DisasterReport.timestamp))
+
+        # --- Log the generated SQL for debugging ---
+        try:
+            compiled_sql = str(query.compile(db.session.bind, compile_kwargs={"literal_binds": False})) # Use session bind for dialect
+            current_app.logger.debug(f"Generated SQL Query v3:\n{compiled_sql}")
+        except Exception as sql_log_err:
+            current_app.logger.warning(f"Could not compile/log SQL query: {sql_log_err}")
+        # --- End SQL logging ---
+
+        # Execute the query
+        results = db.session.execute(query).scalars().all()
+
+        # --- END SQLAlchemy Window Function Query ---
+
+        report_count = len(results)
+        current_app.logger.info(f"Found {report_count} reports (Top {N} per type).")
+
         # Convert to list of dictionaries
-        disasters_data = [r.to_dict() for r in reports]
+        disasters_data = [r.to_dict() for r in results]
         current_app.logger.debug(f"Returning {len(disasters_data)} reports in API response.")
         return jsonify(disasters_data)
+
     except Exception as e:
-        current_app.logger.error(f"Error querying database for API: {e}", exc_info=True)
-        # Return a JSON error response for API clients
+        current_app.logger.error(f"Error querying top N reports per type: {e}", exc_info=True)
         return jsonify(error="Error retrieving disaster data", message=str(e)), 500
 
+# --- Keep remaining routes ---
+# ... (report, verify, process_verification, history, login, is_safe_url, logout, register) ...
+
+
+# --- Keep remaining routes ---
+# ... (report, verify, process_verification, history, login, is_safe_url, logout, register) ...
 
 # --- User Report Submission (Login Required) ---
 @main_bp.route('/report', methods=['GET', 'POST'])

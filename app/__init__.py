@@ -57,15 +57,39 @@ def get_user_id_or_ip():
         return get_remote_address
 
 # --- Utility Function for Cache Invalidation (Defined globally here) ---
-# Needs access to the 'cache' instance
+# --- Utility Function for Cache Invalidation (REVISED AGAIN) ---
 def invalidate_disaster_api_cache():
     """Clears the cache used by the main /api/disasters endpoint."""
-    try:
-        # Assumes the cached function is named 'get_disasters' in routes.py
-        cache.delete_memoized('get_disasters')
-        print("Cache cleared for get_disasters endpoint.")
-    except Exception as e:
-        print(f"Error clearing cache: {e}")
+    # --- Use current_app to access cache within context ---
+    from flask import current_app
+    cache_obj = current_app.extensions.get('cache') # Get cache instance from app extensions
+    if cache_obj:
+        try:
+            # Assuming the view function was registered as 'main.get_disasters'
+            # Check your blueprint registration if this name is different
+            view_func_name = 'main.get_disasters'
+            # Use delete_memoized_verbatim if available (newer Flask-Caching)
+            if hasattr(cache_obj, 'delete_memoized_verbatim'):
+                 cache_obj.delete_memoized_verbatim(view_func_name)
+                 print(f"Cache cleared for '{view_func_name}' using delete_memoized_verbatim.")
+            # Fallback for older versions or if above fails (might not work with blueprints)
+            elif hasattr(cache_obj, 'delete_memoized'):
+                  # This might still fail with blueprints, but worth trying
+                  try:
+                      from .routes import get_disasters # Try local import as last resort
+                      cache_obj.delete_memoized(get_disasters)
+                      print(f"Cache cleared for '{view_func_name}' using delete_memoized(func_ref).")
+                  except Exception:
+                      print(f"Could not clear cache using delete_memoized(func_ref). Manual clearing might be needed.")
+
+            # --- Optionally clear by path (less specific if using @cache.memoize) ---
+            # cache_obj.delete('/api/disasters')
+            # print("Attempted cache clear for path /api/disasters")
+
+        except Exception as e:
+            current_app.logger.error(f"Error clearing cache: {e}", exc_info=True)
+    else:
+        print("Error clearing cache: Cache object not found in app extensions.")
 
 
 # --- App Factory Function ---
