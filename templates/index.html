@@ -72,7 +72,7 @@
         <details class="filter-details">
              <summary class="filter-header">
                  <h2 class="section-title"><i class="fas fa-filter"></i> Filter Disasters</h2>
-                 <button class="btn btn-sm btn-outline filter-toggle-btn" type="button">
+                 <button class="btn btn-sm btn-outline filter-toggle-btn" type="button" aria-label="Toggle Filters">
                      <i class="fas fa-chevron-down"></i> <span class="toggle-text">Show Filters</span>
                  </button>
              </summary>
@@ -385,7 +385,25 @@
 
         // Filter toggle ... (keep listener) ...
         const filterDetails = document.querySelector('.filter-details');
-        if(filterDetails) { /* ... keep listener ... */ }
+        if(filterDetails) {
+            // Listen to the 'toggle' event on the <details> element itself
+                filterDetails.addEventListener('toggle', (event) => {
+                     const isOpen = filterDetails.open;
+                     const icon = toggleBtn.querySelector('i');
+                     const text = toggleBtn.querySelector('span');
+                     console.log("Filter toggle state changed:", isOpen);
+                     if(icon) icon.className = isOpen ? 'fas fa-chevron-up' : 'fas fa-chevron-down';
+                     if(text) text.textContent = isOpen ? 'Hide Filters' : 'Show Filters';
+                });
+                // Set initial state (optional, browser default is usually closed)
+                // filterDetails.open = false; // Ensure closed initially
+                // Force initial text/icon update if needed
+                 const initialOpen = filterDetails.open;
+                 const initialIcon = toggleBtn.querySelector('i');
+                 const initialText = toggleBtn.querySelector('span');
+                 if(initialIcon) initialIcon.className = initialOpen ? 'fas fa-chevron-up' : 'fas fa-chevron-down';
+                 if(initialText) initialText.textContent = initialOpen ? 'Hide Filters' : 'Show Filters';
+        }
         else { console.warn("Filter details/summary elements not found."); }
 
         // View toggle buttons ... (keep listener) ...

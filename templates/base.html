@@ -1,6 +1,6 @@
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -30,6 +30,11 @@
                     <span>DisasterTrack</span>
                 </a>
             </div>
+            {# --- Add Dark Mode Toggle Button --- #}
+                <button class="dark-mode-toggle" id="darkModeToggle" title="Toggle dark mode">
+                    <i class="fas fa-moon"></i> {# Moon icon initially #}
+                </button>
+                {# --- END Add Dark Mode Toggle Button --- #}
             {# Mobile Menu Toggle Button (Ensure CSS handles its display/functionality) #}
             <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false">
                 <span></span><span></span><span></span>
@@ -97,6 +102,57 @@
     {% block scripts %}{% endblock %}
 
     {# --- Base Template JavaScript (e.g., mobile menu, flash close, dynamic year) --- #}
+    <script>
+        (function() { // IIFE to avoid polluting global scope
+            const toggleButton = document.getElementById('darkModeToggle');
+            const body = document.body;
+            const html = document.documentElement; // Target <html> tag for data-theme
+            const sunIcon = '<i class="fas fa-sun"></i>';
+            const moonIcon = '<i class="fas fa-moon"></i>';
+
+            // Function to set the theme
+            function setTheme(theme) {
+                if (theme === 'dark') {
+                    body.classList.add('dark-mode');
+                    html.setAttribute('data-theme', 'dark');
+                    toggleButton.innerHTML = sunIcon; // Show sun in dark mode
+                    localStorage.setItem('theme', 'dark');
+                } else {
+                    body.classList.remove('dark-mode');
+                    html.setAttribute('data-theme', 'light');
+                    toggleButton.innerHTML = moonIcon; // Show moon in light mode
+                    localStorage.setItem('theme', 'light');
+                }
+            }
+
+            // Check local storage for saved theme preference
+            const savedTheme = localStorage.getItem('theme');
+            // Check prefers-color-scheme media query
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+            // Determine initial theme: saved theme > OS preference > default (light)
+            const initialTheme = savedTheme || (prefersDark ? 'dark' : 'light');
+            setTheme(initialTheme); // Apply initial theme on load
+
+            // Add click listener to the toggle button
+            if (toggleButton) {
+                toggleButton.addEventListener('click', () => {
+                    const currentTheme = html.getAttribute('data-theme');
+                    setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+                });
+            } else {
+                 console.warn("Dark mode toggle button not found.");
+            }
+
+            // Optional: Listen for changes in OS preference
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+                 // Only change if no theme explicitly saved by user
+                 if (!localStorage.getItem('theme')) {
+                     setTheme(event.matches ? 'dark' : 'light');
+                 }
+            });
+        })(); // End IIFE
+    </script>
     <script>
         // Basic Mobile Menu Toggle
         document.addEventListener('DOMContentLoaded', function() {
