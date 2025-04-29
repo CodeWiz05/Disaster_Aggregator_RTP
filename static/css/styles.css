@@ -44,6 +44,14 @@
     --table-row-even-bg: var(--grey-light);
     --table-row-hover-bg: #e9ecef;
 }
+/* Define dark mode variable overrides targeting the html tag */
+html[data-theme='dark'] { /* Or use html.dark-mode if preferred */
+    /* --- Dark Mode Variable Overrides --- */
+    --bg-primary: #212121;
+    --bg-secondary: #303030;
+    --text-primary: #e0e0e0;
+    /* ... other dark mode variables ... */
+}
 
 body.dark-mode {
     /* --- Dark Mode Theme Variable Overrides --- */
@@ -83,6 +91,11 @@ body {
     flex-direction: column;
     min-height: 100vh; /* Ensure footer stays down */
 }
+html[data-theme='dark'] a:hover { color: var(--primary-light); }
+html[data-theme='dark'] .btn-text:hover { background-color: rgba(255,255,255,0.08); }
+html[data-theme='dark'] .alert-success { background-color: #3a5a40; /* ... */ }
+html[data-theme='dark'] .filters-panel, /* etc... */ { background-color: var(--bg-secondary); color: var(--text-primary); }
+html[data-theme='dark'] .data-table th { background-color: var(--table-header-bg); color: var(--table-header-text); }
 
 main.site-main {
     flex-grow: 1; /* Allow main content to fill space */
@@ -346,6 +359,14 @@ textarea.form-control { min-height: 100px; resize: vertical; }
 .btn-login:hover { background-color: var(--primary-dark); }
 .btn-register { width: 100%; padding: 0.9rem; font-size: 1.1rem; font-weight: 600; background-color: var(--success); color: white; margin-top: 1rem; }
 .btn-register:hover { background-color: var(--success-dark); }
+/* --- START FIX 3: Header Right Wrapper --- */
+.header-right { display: flex; align-items: center; gap: 0.5rem; /* Adjust gap */ }
+/* --- END FIX 3 --- */
+header.site-header {
+    background-color: var(--header-bg); color: var(--header-text);
+    padding: 0.75rem 0; box-shadow: 0 2px 4px var(--shadow-color);
+}
+.header-container { display: flex; justify-content: space-between; align-items: center; }
 /* ... Add styles for report_form, verify_panel, history_page etc. using variables ... */
 /* --- END: Specific Page Containers --- */
 
@@ -354,15 +375,31 @@ textarea.form-control { min-height: 100px; resize: vertical; }
 @media (max-width: 850px) { /* Adjust breakpoint */
     header.site-header { /* May not need this if container handles padding */ }
     .header-container { /* May not need adjustment if using padding */ }
-    .header-right { /* Space for toggles */ }
-    .mobile-menu-toggle { display: block; order: 1; } /* Show toggle, make it last */
-    .dark-mode-toggle { order: 0; } /* Dark mode toggle before burger */
+    .header-right { gap: 0.5rem; } /*Reduce gap on mobile*/
+    .mobile-menu-toggle { display: block; order: 2; } /* Show toggle, make it last */
+    .dark-mode-toggle { order: 1; margin-left: auto; margin-right: 0.5rem; } /* Dark mode toggle before burger */
     nav.main-nav {
         display: none; position: absolute; top: 100%; /* Position below header */
-        left: 0; right: 0; background-color: var(--primary-dark); /* Use theme var */
-        padding: 1rem; z-index: 1050; border-top: 1px solid rgba(255,255,255,0.1);
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        left: 0; right: 0; background-color: var(--header-bg); /* Match header */
+        border-top: 1px solid var(--border-default);
+        box-shadow: 0 4px 6px var(--shadow-color);
+        padding: 1rem 0; /* Vertical padding only */
+        z-index: 1050;
     }
+    body.dark-mode nav.main-nav { background-color: var(--bg-secondary); border-top: 1px solid var(--border-default);}
+    nav.main-nav.active { display: block; }
+    nav.main-nav ul { flex-direction: column; align-items: stretch; /* Stretch full width */ }
+    nav.main-nav li { margin-left: 0; margin-bottom: 0; width: 100%; text-align: left; }
+    nav.main-nav a.nav-link {
+        padding: 0.75rem 1.5rem; /* Consistent padding */
+        display: block;
+        border-bottom: 1px solid var(--border-default);
+        color: var(--text-primary); /* Use text color for dropdown */
+    }
+    nav.main-nav li:last-child a.nav-link { border-bottom: none; }
+    nav.main-nav li.active a.nav-link { background-color: rgba(0,0,0,0.1); } /* Simple active state */
+    body.dark-mode nav.main-nav li.active a.nav-link { background-color: rgba(255,255,255,0.1); }
+    nav.main-nav li.active a.nav-link::after { display: none; } /* Hide underline */
     nav.main-nav.active { display: block; } /* Show when active */
     nav.main-nav ul { flex-direction: column; align-items: center; }
     nav.main-nav li { margin-left: 0; margin-bottom: 0.5rem; width: 100%; text-align: center; }

@@ -38,56 +38,100 @@ let markerLayer = L.markerClusterGroup({chunkedLoading:true, maxClusterRadius: 8
 let disasters = []; // Store raw data fetched from API
 let currentFilteredDisasters = []; // Store data currently displayed after filtering
 
+// ... (Keep CSS Injection, Icon Path Fix, Global Vars) ...
+let currentMapTheme = 'light'; // Track current map theme
+let activeTileLayer = null; // Track the current tile layer
+
 // --- REVISED initMap Function for Horizontal Wrapping ---
 function initMap() {
-    console.log("Initializing map for horizontal wrapping...");
+    console.log("Initializing map (Focus on Wrapping)...");
     const mapContainer = document.getElementById('disaster-map');
     if (!mapContainer) { console.error("Map container not found."); return false; }
-    if (disasterMap instanceof L.Map) { console.warn("Map already initialized."); return true; } // Prevent re-init
+    if (disasterMap instanceof L.Map) { console.warn("Map already initialized."); return true; }
 
     try {
         disasterMap = L.map(mapContainer, {
             center: [20, 0],
-            // --- Set desired zoom levels ---
-            zoom: 2,      // Initial zoom
-            minZoom: 2,   // Allow zooming out this far (adjust 1 or 2)
-            maxZoom: 18,  // Max zoom in
-            // --- REMOVE maxBounds and maxBoundsViscosity to allow infinite panning ---
-            // maxBounds: [[-85.05112878, -180.0], [85.05112878, 180.0]],
+            zoom: 2,
+            minZoom: 2,   // Keep a reasonable minZoom
+            maxZoom: 18,
+            // --- Use Leaflet defaults for wrapping ---
+            worldCopyJump: true, // This is the default and enables wrapping jump
+            // --- REMOVE maxBounds ---
+            // maxBounds: [[-85...],[85...]],
             // maxBoundsViscosity: 1.0,
-            // --- Ensure worldCopyJump is TRUE (Leaflet default) ---
-            worldCopyJump: true // This enables the wrapping behavior
         });
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-            // --- REMOVE noWrap and bounds to allow tile wrapping ---
-            // noWrap: true,
-            minZoom: 2, // Match map's minZoom
-            maxZoom: 18
-            // bounds: [[-90, -180],[90, 180]]
-        }).addTo(disasterMap);
+        // --- Set Initial Theme/Tile Layer ---
+        const initialTheme = document.documentElement.getAttribute('data-theme') || 'light';
+        setMapTheme(initialTheme); // Call this to add the *first* layer
 
-        markerLayer.addTo(disasterMap);
-        L.control.scale().addTo(disasterMap);
-        console.log("Map initialized with wrapping ENABLED.");
+        markerLayer.addTo(disasterMap); // Add cluster group
+        L.control.scale().addTo(disasterMap); // Add scale
+        console.log("Map initialized with default wrapping.");
 
-        attachZoomListeners(); // Attach custom zoom button listeners if used
+        attachZoomListeners(); // Attach custom zoom button listeners
 
-        // InvalidateSize is still good practice after init
-        setTimeout(() => {
-            if (disasterMap) { disasterMap.invalidateSize(); }
-        }, 50);
+        // InvalidateSize still useful after initial layout
+        setTimeout(() => { if (disasterMap) { disasterMap.invalidateSize(); } }, 100);
 
         return true; // Success
 
     } catch(e) {
-        console.error("Error during L.map() or L.tileLayer() initialization:", e);
+        console.error("Error during map initialization:", e);
         if (disasterMap) { try { disasterMap.remove(); } catch (removeErr) {} disasterMap = undefined; }
-        return false; // Failure
+        return false;
     }
-}
-// --- End REVISED initMap ---
+} // End initMap
+
+
+// --- Set Map Theme Function (Simplified Tile Options) ---
+function setMapTheme(theme) {
+    console.log(`Setting map theme to: ${theme}`);
+    if (!disasterMap && theme) {
+         // If map doesn't exist yet, just store the theme for initMap
+         console.log("Map not ready, storing theme for later.");
+         currentMapTheme = theme;
+         return;
+    }
+    if (!disasterMap) {
+        console.error("Cannot set theme, map object does not exist.");
+        return;
+    }
+     // Only proceed if theme actually changes or no layer exists yet
+     if (currentMapTheme === theme && activeTileLayer) {
+         console.log("Theme already set.");
+         return;
+     }
+
+    let newTileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+    let newAttribution = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+    if (theme === 'dark') {
+        newTileUrl = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+        newAttribution = '© OSM contributors © CARTO';
+    }
+
+    // Remove the old layer *before* adding the new one
+    if (activeTileLayer) {
+        console.log("Removing previous tile layer.");
+        disasterMap.removeLayer(activeTileLayer);
+        activeTileLayer = null; // Clear the reference
+    }
+
+    // Add the new tile layer with options suitable for wrapping
+    console.log("Adding new tile layer:", newTileUrl);
+    activeTileLayer = L.tileLayer(newTileUrl, {
+        attribution: newAttribution,
+        // --- Ensure NO noWrap or bounds for seamless wrapping ---
+        minZoom: 2,
+        maxZoom: 18
+    }).addTo(disasterMap);
+
+    currentMapTheme = theme; // Update the currently active theme
+    console.log("Map theme updated.");
+
+} // End setMapTheme
+
 
 // --- Helper to attach zoom listeners ---
 function attachZoomListeners() {

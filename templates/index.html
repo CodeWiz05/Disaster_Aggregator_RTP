@@ -45,6 +45,13 @@
         .legend-marker.storm { background-color: #8e24aa; }
         .legend-marker.landslide { background-color: #6d4c41; }
         .legend-marker.other { background-color: #757575; }
+        .filter-details summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-default); margin-bottom: 1rem;}
+        .filter-details summary::-webkit-details-marker { display: none; } /* Hide default arrow */
+        .filter-details summary h2 { margin-bottom: 0; }
+        .filter-toggle-btn { background: none; border: none; color: var(--link-color); font-weight: 500;}
+        .filters-panel { padding-top: 1rem; } /* Content of the details */
+        .filter-details[open] summary .filter-toggle-btn i { transform: rotate(180deg); } /* Rotate arrow when open */
+        .filter-toggle-btn i { transition: transform 0.2s ease-in-out; }
     </style>
 {% endblock %}
 
@@ -69,7 +76,7 @@
 <section class="filters-section">
     <div class="container">
         {# Use details/summary for accessible toggle #}
-        <details class="filter-details">
+        <details class="filter-details" id="filter-details-control"> {# Added ID #}
              <summary class="filter-header">
                  <h2 class="section-title"><i class="fas fa-filter"></i> Filter Disasters</h2>
                  <button class="btn btn-sm btn-outline filter-toggle-btn" type="button" aria-label="Toggle Filters">
@@ -163,11 +170,13 @@
     <div class="container">
         <div class="section-header">
             <h2 class="section-title"><i class="fas fa-list"></i> Recent Disasters</h2>
-            {# View toggle buttons - ensure JS/CSS handles this #}
+            {# --- START FIX 6: Single View Toggle --- #}
             <div class="view-controls">
-                <button class="btn btn-sm btn-icon active" id="table-view" title="Table view"><i class="fas fa-table"></i></button>
-                <button class="btn btn-sm btn-icon" id="card-view" title="Card view"><i class="fas fa-th-large"></i></button>
+                <button class="btn btn-sm btn-icon" id="view-toggle-btn" data-current-view="table" title="Switch to Card View">
+                    <i class="fas fa-table"></i> {# Initial icon #}
+                </button>
             </div>
+            {# --- END FIX 6 --- #}
         </div>
         {# Wrapper to toggle views #}
         <div class="data-wrapper table-view"> {# Default to table view #}
@@ -246,50 +255,70 @@
 {# --- Load YOUR map logic THIRD --- #}
 <script src="{{ url_for('static', filename='js/map.js') }}"></script>
 
-{# --- Inline script for PAGE-SPECIFIC functions needed by map.js --- #}
+{# templates/index.html - Inline script block at the end #}
 <script>
     // --- START PAGINATION Variables ---
     let currentPage = 1;
-    let itemsPerPage = 10; // Default, will be updated from select
+    let itemsPerPage = 10; // Default, updated from select on load
     let currentTableData = []; // Holds the FULL filtered list from map.js
     // --- END PAGINATION Variables ---
 
-    // Define page-specific functions needed by map.js OR called locally
-
+    // --- Helper Function: Basic HTML Sanitizer ---
     function sanitizeHtml(str) {
         if (typeof str !== 'string') return '';
         const temp = document.createElement('div');
-        temp.textContent = str; return temp.innerHTML;
+        temp.textContent = str; // Use browser's text setting to encode
+        return temp.innerHTML;
     }
 
+    // --- Helper: Calculate Cutoff Date ---
     function calculateCutoffDate(daysAgo) {
-         const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - daysAgo);
-         cutoff.setHours(0, 0, 0, 0); return cutoff;
+         const cutoff = new Date();
+         cutoff.setDate(cutoff.getDate() - daysAgo);
+         cutoff.setHours(0, 0, 0, 0);
+         return cutoff;
     }
 
+    // --- Event Handler for Table/Card Action Buttons ---
     function handleActionClick(event) {
-        const button = event.target.closest('button'); if (!button) return;
-        const id = button.getAttribute('data-id'); if (!id) return;
+        const button = event.target.closest('button'); // Find the button element that was clicked or contains the clicked element
+        if (!button) return; // Exit if click wasn't on or inside a button
+
+        const id = button.getAttribute('data-id'); // Get the disaster ID from the button
+        if (!id) return; // Exit if button doesn't have a data-id
+
         if (button.classList.contains('view-details')) {
-            if (typeof viewDisasterDetails === 'function') { viewDisasterDetails(id); }
-            else { console.error("viewDisasterDetails function not found."); }
+            // Check if the global viewDisasterDetails function (from map.js) exists
+            if (typeof viewDisasterDetails === 'function') {
+                viewDisasterDetails(id); // Call the function from map.js
+            } else {
+                console.error("viewDisasterDetails function not found globally.");
+                alert(`Details functionality not available for ID ${id}.`); // Fallback alert
+            }
         } else if (button.classList.contains('share-event')) {
             console.log(`Sharing event ${id} (placeholder)`);
+            // Placeholder - Implement actual sharing logic (e.g., copy link, open share dialog)
             alert(`Sharing for ID ${id} not implemented yet.`);
         }
     }
 
+    // --- Helper to Attach Event Listeners Using Delegation ---
     function attachDetailAndShareListeners() {
-         const dataArea = document.querySelector('.data-wrapper'); if (!dataArea) return;
-         dataArea.removeEventListener('click', handleActionClick); // Prevent duplicates
+         const dataArea = document.querySelector('.data-wrapper'); // Target the parent container
+         if (!dataArea) {
+             console.warn("Data wrapper not found for attaching listeners.");
+             return;
+         }
+         // Remove previous listener of the same type before adding, to prevent duplicates
+         dataArea.removeEventListener('click', handleActionClick);
+         // Add one listener to the parent container
          dataArea.addEventListener('click', handleActionClick);
          // console.log("Attached detail/share listeners to data wrapper."); // Optional log
     }
 
-    // --- UPDATE THIS FUNCTION ---
+    // --- Function to Update the Disaster Table/Cards ---
     function updateDisasterTable(filteredDisasters) {
-        // Store the full filtered data if it's being passed directly
-        // Otherwise, assume currentTableData already holds the full filtered list
+        // Store the full filtered data globally for pagination/other actions
         if (filteredDisasters && Array.isArray(filteredDisasters)) {
              currentTableData = filteredDisasters;
         } else if (!Array.isArray(currentTableData)) {
@@ -297,171 +326,244 @@
              currentTableData = []; // Ensure it's an array
         }
 
-        console.log("Updating disaster table. Total items:", currentTableData.length, "Items/Page:", itemsPerPage, "CurrentPage:", currentPage);
+        console.log("Updating disaster table/cards. Total items:", currentTableData.length, "Items/Page:", itemsPerPage, "CurrentPage:", currentPage);
 
         const tableBody = document.getElementById('disaster-rows');
+        const cardsContainer = document.getElementById('disaster-cards');
         const loadingRow = tableBody ? tableBody.querySelector('.loading-row') : null;
+        const loadingOverlay = cardsContainer ? cardsContainer.querySelector('.loading-overlay') : null;
 
-        // Clear previous content
+        // Clear previous content (rows/cards)
         if (tableBody) { while (tableBody.firstChild && tableBody.firstChild !== loadingRow) { tableBody.removeChild(tableBody.firstChild); } if(loadingRow) loadingRow.style.display = 'none'; }
-        else { console.warn("Table body ('disaster-rows') not found."); return; }
+        if (cardsContainer) { while (cardsContainer.firstChild && cardsContainer.firstChild !== loadingOverlay) { cardsContainer.removeChild(cardsContainer.firstChild); } if(loadingOverlay) loadingOverlay.style.display = 'none'; }
 
-        // Handle empty results
+        // Handle empty results after filtering
+        if (!tableBody && !cardsContainer) { console.warn("Table/card elements not found."); return; }
         if (currentTableData.length === 0) {
-            const row = document.createElement('tr');
-            row.innerHTML = '<td colspan="6" style="text-align: center; padding: 1rem;">No disasters match filters.</td>';
-            if (loadingRow) tableBody.insertBefore(row, loadingRow); else tableBody.appendChild(row);
-            updatePaginationControls(0); // Update controls for empty state
+            if (tableBody) { const row = document.createElement('tr'); row.innerHTML = '<td colspan="6" style="text-align: center; padding: 1rem;">No disasters match filters.</td>'; if (loadingRow) tableBody.insertBefore(row, loadingRow); else tableBody.appendChild(row); }
+            if (cardsContainer) { const msg = document.createElement('p'); msg.textContent = 'No disasters match filters.'; msg.style.textAlign = 'center'; msg.style.padding = '2rem'; if (loadingOverlay) cardsContainer.insertBefore(msg, loadingOverlay); else cardsContainer.appendChild(msg); }
+            updatePaginationControls(0); // Update pagination for empty state
             return;
         }
 
-        // --- PAGINATION Calculation ---
+        // --- Pagination Calculation ---
         const totalItems = currentTableData.length;
-        const totalPages = Math.ceil(totalItems / itemsPerPage) || 1; // Ensure at least 1 page
-        // Adjust currentPage if it's now out of bounds (e.g., after changing itemsPerPage)
-        currentPage = Math.max(1, Math.min(currentPage, totalPages));
-
+        const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+        currentPage = Math.max(1, Math.min(currentPage, totalPages)); // Clamp current page
         const startIndex = (currentPage - 1) * itemsPerPage;
         const endIndex = startIndex + itemsPerPage;
-        const pageData = currentTableData.slice(startIndex, endIndex); // Get data for the current page
+        const pageData = currentTableData.slice(startIndex, endIndex); // Get data slice for current page
         console.log(`Displaying page ${currentPage}/${totalPages} (Items ${startIndex + 1}-${Math.min(endIndex, totalItems)} of ${totalItems})`);
-        // --- END PAGINATION Calculation ---
 
-        // Populate table rows with pageData
-        pageData.forEach(disaster => { // Iterate over the SLICE
-            const severity = disaster.severity || 1; const type = disaster.type || 'other';
-            const severityClass = `severity-${severity}`; const typeClass = type;
-            let formattedTime = 'N/A'; try { formattedTime = disaster.timestamp ? new Date(disaster.timestamp).toLocaleString(undefined, {dateStyle: 'short', timeStyle: 'short'}) : 'N/A'; } catch(e) {}
-            const location = sanitizeHtml(disaster.location || disaster.description?.split('.')[0] || `[${disaster.lat?.toFixed(2)}, ${disaster.lng?.toFixed(2)}]`);
+        // --- Populate Table Rows & Cards with Page Data ---
+        pageData.forEach(disaster => {
+            const severity = disaster.severity || 1;
+            const type = disaster.type || 'other';
+            const severityClass = `severity-${severity}`;
+            const typeClass = type;
+            let formattedTime = 'N/A';
+            try { formattedTime = disaster.timestamp ? new Date(disaster.timestamp).toLocaleString(undefined, {dateStyle: 'short', timeStyle: 'short'}) : 'N/A'; } catch(e) {}
+            const locationString = disaster.location || disaster.description?.split('.')[0] || `[${disaster.lat?.toFixed(2)}, ${disaster.lng?.toFixed(2)}]`;
             const titleString = disaster.title || 'N/A';
+            const descriptionString = disaster.description || '';
             const disasterId = disaster.id || '';
 
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${sanitizeHtml(titleString)}</td>
-                <td><span class="badge ${typeClass}">${sanitizeHtml(type)}</span></td>
-                <td><span class="severity-indicator ${severityClass}">${severity}</span></td>
-                <td>${formattedTime}</td>
-                <td>${location.substring(0, 60)}${location.length > 60 ? '...' : ''}</td>
-                <td class="actions-cell">
-                    <button class="btn btn-sm btn-icon view-details" data-id="${disasterId}" title="View details"><i class="fas fa-eye"></i></button>
-                    <button class="btn btn-sm btn-icon share-event" data-id="${disasterId}" title="Share"><i class="fas fa-share-alt"></i></button>
-                </td>`;
-            if (loadingRow) tableBody.insertBefore(row, loadingRow); else tableBody.appendChild(row);
-        });
+            // Create table row if table exists
+            if (tableBody) {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${sanitizeHtml(titleString)}</td>
+                    <td><span class="badge ${typeClass}">${sanitizeHtml(type)}</span></td>
+                    <td><span class="severity-indicator ${severityClass}">${severity}</span></td>
+                    <td>${formattedTime}</td>
+                    <td>${sanitizeHtml(locationString).substring(0, 60)}${locationString.length > 60 ? '...' : ''}</td>
+                    <td class="actions-cell">
+                        <button class="btn btn-sm btn-icon view-details" data-id="${disasterId}" title="View details"><i class="fas fa-eye"></i></button>
+                        <button class="btn btn-sm btn-icon share-event" data-id="${disasterId}" title="Share"><i class="fas fa-share-alt"></i></button>
+                    </td>`;
+                if (loadingRow) tableBody.insertBefore(row, loadingRow); else tableBody.appendChild(row);
+            }
 
-        // Update pagination controls display based on the calculated totalPages
+            // Create card if container exists
+            if (cardsContainer) {
+                 const card = document.createElement('div');
+                 card.className = 'disaster-card'; // Add styles for this class
+                 card.innerHTML = `
+                     <div class="card-header ${typeClass}"><h3>${sanitizeHtml(titleString)}</h3><span class="severity-indicator ${severityClass}">${severity}</span></div>
+                     <div class="card-body">
+                         <p><i class="fas fa-map-marker-alt"></i> ${sanitizeHtml(locationString).substring(0, 50)}${location.length > 50 ? '...' : ''}</p>
+                         <p><i class="far fa-clock"></i> ${formattedTime}</p>
+                         <p class="card-description">${sanitizeHtml(descriptionString).substring(0,100)}...</p>
+                     </div>
+                     <div class="card-footer">
+                         <button class="btn btn-sm view-details" data-id="${disasterId}"><i class="fas fa-eye"></i> Details</button>
+                         <button class="btn btn-sm btn-icon share-event" data-id="${disasterId}"><i class="fas fa-share-alt"></i></button>
+                     </div>`;
+                 if (loadingOverlay) cardsContainer.insertBefore(card, loadingOverlay); else cardsContainer.appendChild(card);
+            }
+        }); // End forEach pageData
+
+        // Update pagination controls display
         updatePaginationControls(totalPages);
-        // Attach listeners AFTER adding rows
+        // Attach listeners AFTER loop finishes and elements are in DOM
         attachDetailAndShareListeners();
 
     } // End updateDisasterTable
 
-    // --- Function to update pagination controls (NO CHANGE NEEDED) ---
+    // --- Function to Update Pagination Controls ---
     function updatePaginationControls(totalPages) {
         const prevBtn = document.getElementById('prev-page');
         const nextBtn = document.getElementById('next-page');
         const pageInfo = document.getElementById('page-info');
         const paginationControls = document.querySelector('.pagination-controls');
 
-        if (!paginationControls || !prevBtn || !nextBtn || !pageInfo) { console.warn("Pagination elements missing."); return; }
+        if (!paginationControls || !prevBtn || !nextBtn || !pageInfo) {
+            console.warn("Pagination control elements not found.");
+            return;
+        }
 
-        if (totalPages <= 1) { paginationControls.style.display = 'none'; }
-        else {
-            paginationControls.style.display = 'flex';
+        if (totalPages <= 1) {
+            paginationControls.style.display = 'none'; // Hide controls if only one page
+        } else {
+            paginationControls.style.display = 'flex'; // Show controls
             pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
-            prevBtn.disabled = currentPage <= 1;
-            nextBtn.disabled = currentPage >= totalPages;
+            prevBtn.disabled = currentPage <= 1; // Disable prev on page 1
+            nextBtn.disabled = currentPage >= totalPages; // Disable next on last page
         }
     } // End updatePaginationControls
 
-    // --- Function to update statistics (NO CHANGE NEEDED) ---
-    function updateStatistics(dataForStats) { /* ... keep implementation ... */ }
+    // --- Function to Update Statistics ---
+    function updateStatistics(dataForStats) { // Changed param name for clarity
+        console.log("Updating statistics in index.html with", dataForStats.length, "items");
+        const totalEl = document.getElementById('stat-total');
+        const commonEl = document.getElementById('stat-common');
+        const severeEl = document.getElementById('stat-severe');
+        const newEl = document.getElementById('stat-new'); // Assumes this is 'Last 7 Days'
+
+        if (!totalEl || !commonEl || !severeEl || !newEl) {
+            console.warn("One or more statistic elements not found.");
+            return;
+        }
+
+        totalEl.textContent = dataForStats.length; // Use count of currently *filtered* data
+
+        if (dataForStats.length > 0) {
+            // Calculate most common type from filtered data
+            const typeCounts = {};
+            dataForStats.forEach(d => { typeCounts[d.type] = (typeCounts[d.type] || 0) + 1; });
+            let mostCommonType = 'N/A'; let maxCount = 0;
+            for (const type in typeCounts) { if (typeCounts[type] > maxCount) { maxCount = typeCounts[type]; mostCommonType = type.charAt(0).toUpperCase() + type.slice(1); } }
+            commonEl.textContent = sanitizeHtml(mostCommonType);
+
+            // Calculate highest severity from filtered data
+            let highestSeverity = dataForStats.reduce((max, d) => Math.max(max, d.severity || 0), 0);
+            severeEl.textContent = highestSeverity > 0 ? highestSeverity : 'N/A';
+
+            // Calculate count within last 7 days from filtered data
+            const cutoff = calculateCutoffDate(7);
+            const recentEvents = dataForStats.filter(d => d.timestamp && new Date(d.timestamp) >= cutoff).length;
+            newEl.textContent = recentEvents; // Update the correct element ID if different
+        } else {
+            // Reset stats if no data after filtering
+            commonEl.textContent = 'N/A'; severeEl.textContent = 'N/A'; newEl.textContent = 0;
+        }
+    } // End updateStatistics
 
 
-    // --- Add event listeners for elements unique to index.html AFTER DOM is ready ---
+    // --- Add event listeners for index.html specific elements AFTER DOM is ready ---
     document.addEventListener('DOMContentLoaded', function() {
         console.log("Index.html specific DOMContentLoaded actions running.");
 
-        // Filter toggle ... (keep listener) ...
-        const filterDetails = document.querySelector('.filter-details');
+        // Filter toggle listener
+        const filterDetails = document.getElementById('filter-details-control'); // Use ID added to <details>
         if(filterDetails) {
-            // Listen to the 'toggle' event on the <details> element itself
-                filterDetails.addEventListener('toggle', (event) => {
+            const summary = filterDetails.querySelector('summary');
+            const toggleBtn = summary ? summary.querySelector('.filter-toggle-btn') : null;
+            if (summary && toggleBtn) {
+                filterDetails.addEventListener('toggle', () => {
                      const isOpen = filterDetails.open;
                      const icon = toggleBtn.querySelector('i');
                      const text = toggleBtn.querySelector('span');
-                     console.log("Filter toggle state changed:", isOpen);
                      if(icon) icon.className = isOpen ? 'fas fa-chevron-up' : 'fas fa-chevron-down';
                      if(text) text.textContent = isOpen ? 'Hide Filters' : 'Show Filters';
                 });
-                // Set initial state (optional, browser default is usually closed)
-                // filterDetails.open = false; // Ensure closed initially
-                // Force initial text/icon update if needed
-                 const initialOpen = filterDetails.open;
+                // Set initial state text/icon based on default open/closed state
+                 const initialOpen = filterDetails.hasAttribute('open'); // Check if open initially
                  const initialIcon = toggleBtn.querySelector('i');
                  const initialText = toggleBtn.querySelector('span');
                  if(initialIcon) initialIcon.className = initialOpen ? 'fas fa-chevron-up' : 'fas fa-chevron-down';
-                 if(initialText) initialText.textContent = initialOpen ? 'Hide Filters' : 'Show Filters';   
-        }
-        else { console.warn("Filter details/summary elements not found."); }
+                 if(initialText) initialText.textContent = initialOpen ? 'Hide Filters' : 'Show Filters';
+            } else { console.warn("Filter summary or toggle button not found."); }
+        } else { console.warn("Filter details element not found."); }
 
-        // View toggle buttons ... (keep listener) ...
-        const tableViewBtn = document.getElementById('table-view');
-        /* ... etc ... */
-        if (tableViewBtn /*...and others...*/) { /* ... keep listener ... */ }
-        else { console.warn("Table/Card view toggle elements not found."); }
+        // --- View toggle buttons listener (MODIFIED) ---
+        const viewToggleButton = document.getElementById('view-toggle-btn');
+        const dataWrapper = document.querySelector('.data-wrapper');
+        const paginationControls = document.querySelector('.pagination-controls'); // Get pagination controls
+        const itemsPerPageSelector = document.querySelector('.items-per-page-selector'); // Get items selector
 
-        // --- START Pagination Listener Setup ---
+        if (viewToggleButton && dataWrapper) {
+            let currentView = dataWrapper.classList.contains('table-view') ? 'table' : 'card';
+            viewToggleButton.innerHTML = currentView === 'table' ? '<i class="fas fa-th-large"></i>' : '<i class="fas fa-table"></i>';
+            viewToggleButton.title = currentView === 'table' ? 'Switch to Card View' : 'Switch to Table View';
+
+            // Function to show/hide pagination based on view and total pages
+            const updatePaginationVisibility = () => {
+                 const totalPages = Math.ceil(currentTableData.length / itemsPerPage);
+                 const showPagination = (currentView === 'table' && totalPages > 1);
+                 if (paginationControls) paginationControls.style.display = showPagination ? 'flex' : 'none';
+                 if (itemsPerPageSelector) itemsPerPageSelector.style.display = (currentView === 'table') ? 'block' : 'none'; // Show items selector only for table
+            };
+
+            viewToggleButton.addEventListener('click', function() {
+                const isTableView = dataWrapper.classList.contains('table-view');
+                if (isTableView) { // Switching TO Card View
+                    dataWrapper.classList.remove('table-view'); dataWrapper.classList.add('card-view');
+                    this.innerHTML = '<i class="fas fa-table"></i>'; this.title = 'Switch to Table View';
+                    currentView = 'card';
+                } else { // Switching TO Table View
+                    dataWrapper.classList.remove('card-view'); dataWrapper.classList.add('table-view');
+                    this.innerHTML = '<i class="fas fa-th-large"></i>'; this.title = 'Switch to Card View';
+                    currentView = 'table';
+                }
+                updatePaginationVisibility(); // Update visibility after switching view
+                console.log("Switched view to:", currentView);
+            });
+
+            // Initial visibility update
+            updatePaginationVisibility();
+
+        } else { console.warn("View toggle button or data wrapper not found."); }
+
+        // --- Pagination Listeners (MODIFIED to update visibility) ---
         const prevPageBtn = document.getElementById('prev-page');
         const nextPageBtn = document.getElementById('next-page');
         const itemsPerPageSelect = document.getElementById('items-per-page');
 
-        // Set initial itemsPerPage from select (important!)
-        if (itemsPerPageSelect) {
-            itemsPerPage = parseInt(itemsPerPageSelect.value, 10) || 10;
-        } else {
-            itemsPerPage = 10; // Fallback if select is missing
-        }
+        if (itemsPerPageSelect) { itemsPerPage = parseInt(itemsPerPageSelect.value, 10) || 10; }
+        else { itemsPerPage = 10; }
 
         if (prevPageBtn) {
             prevPageBtn.addEventListener('click', () => {
-                if (currentPage > 1) {
-                    currentPage--;
-                    // Re-render the table using the currently stored full filtered data
-                    updateDisasterTable(currentTableData);
-                }
+                if (currentPage > 1) { currentPage--; updateDisasterTable(); /* Visibility updated inside */ }
             });
-        } else { console.warn("Prev Page button not found."); }
-
+        }
         if (nextPageBtn) {
              nextPageBtn.addEventListener('click', () => {
-                // Calculate total pages based on the *stored full data* and *current itemsPerPage*
                 const totalPages = Math.ceil(currentTableData.length / itemsPerPage);
-                if (currentPage < totalPages) {
-                    currentPage++;
-                    updateDisasterTable(currentTableData); // Re-render
-                }
+                if (currentPage < totalPages) { currentPage++; updateDisasterTable(); /* Visibility updated inside */ }
             });
-        } else { console.warn("Next Page button not found."); }
-
-        // Listener for the Items per page dropdown
+        }
         if (itemsPerPageSelect) {
             itemsPerPageSelect.addEventListener('change', (event) => {
                  const newItemsPerPage = parseInt(event.target.value, 10);
-                 if (newItemsPerPage > 0 && newItemsPerPage !== itemsPerPage) { // Only update if value is valid and changed
-                     console.log(`Items per page changed to: ${newItemsPerPage}`);
-                     itemsPerPage = newItemsPerPage;
-                     currentPage = 1; // Reset to page 1 when changing items per page
-                     updateDisasterTable(currentTableData); // Re-render table with full data and new settings
+                 if (newItemsPerPage > 0 && newItemsPerPage !== itemsPerPage) {
+                     itemsPerPage = newItemsPerPage; currentPage = 1;
+                     updateDisasterTable(); // Visibility updated inside
                  }
             });
-        } else {
-            console.warn("'items-per-page' select element not found.");
         }
-        // --- END Pagination Listener Setup ---
-
-        // Other listeners (sorting placeholders, etc.)...
+        // --- END Pagination Listeners ---
 
     }); // End index.html specific DOMContentLoaded
 

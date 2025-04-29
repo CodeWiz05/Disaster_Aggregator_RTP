@@ -4,6 +4,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    {# --- Anti-Flash Script (REVISED) --- #}
+    <script>
+      (function() {
+        // Function to apply theme classes/attributes immediately
+        function applyEarlyTheme(theme) {
+            var root = document.documentElement; // Target <html>
+            if (theme === 'dark') {
+                root.classList.add('dark-mode'); // Add class to HTML
+                root.setAttribute('data-theme', 'dark');
+            } else {
+                root.classList.remove('dark-mode'); // Ensure class is removed
+                root.setAttribute('data-theme', 'light');
+            }
+        }
+        // Determine theme (localStorage > OS pref > default light)
+        try {
+          var mode = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          applyEarlyTheme(mode); // Apply theme right away
+        } catch (e) {
+            console.error("Error applying initial theme:", e);
+            applyEarlyTheme('light'); // Fallback to light on error
+        }
+      })();
+    </script>
+    {# --- End Anti-Flash Script --- #}
+
     <title>{% block title %}DisasterTrack{% endblock %}</title>
 
     {# --- Stylesheets --- #}
@@ -30,36 +57,34 @@
                     <span>DisasterTrack</span>
                 </a>
             </div>
-            {# --- Add Dark Mode Toggle Button --- #}
-                <button class="dark-mode-toggle" id="darkModeToggle" title="Toggle dark mode">
-                    <i class="fas fa-moon"></i> {# Moon icon initially #}
-                </button>
-                {# --- END Add Dark Mode Toggle Button --- #}
-            {# Mobile Menu Toggle Button (Ensure CSS handles its display/functionality) #}
-            <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false">
-                <span></span><span></span><span></span>
-            </button>
-            {# Main Navigation #}
-            <nav class="main-nav" id="main-navigation"> {# Added ID for easier JS targeting #}
-                <ul>
-                    {# Use request.endpoint to determine active page #}
-                    <li class="{{ 'active' if request.endpoint == 'main.index' else '' }}"><a href="{{ url_for('main.index') }}" class="nav-link"><i class="fas fa-home"></i> Home</a></li>
-                    <li class="{{ 'active' if request.endpoint == 'main.report' else '' }}"><a href="{{ url_for('main.report') }}" class="nav-link"><i class="fas fa-exclamation-triangle"></i> Report</a></li>
-                    <li class="{{ 'active' if request.endpoint == 'main.history' else '' }}"><a href="{{ url_for('main.history') }}" class="nav-link"><i class="fas fa-chart-line"></i> History</a></li>
-
-                    {# --- Conditional Auth Links --- #}
-                    {% if current_user.is_authenticated %}
-                        {% if current_user.is_admin %}
-                            <li class="{{ 'active' if request.endpoint == 'main.verify' else '' }}"><a href="{{ url_for('main.verify') }}" class="nav-link"><i class="fas fa-check-circle"></i> Verify</a></li>
+             {# --- START FIX 3: Header Right Wrapper --- #}
+            <div class="header-right">
+                <nav class="main-nav" id="main-navigation">
+                    <ul>
+                        <li class="{{ 'active' if request.endpoint == 'main.index' else '' }}"><a href="{{ url_for('main.index') }}" class="nav-link"><i class="fas fa-home"></i> Home</a></li>
+                        <li class="{{ 'active' if request.endpoint == 'main.report' else '' }}"><a href="{{ url_for('main.report') }}" class="nav-link"><i class="fas fa-exclamation-triangle"></i> Report</a></li>
+                        <li class="{{ 'active' if request.endpoint == 'main.history' else '' }}"><a href="{{ url_for('main.history') }}" class="nav-link"><i class="fas fa-chart-line"></i> History</a></li>
+                        {# Conditional Auth Links #}
+                        {% if current_user.is_authenticated %}
+                            {% if current_user.is_admin %}
+                                <li class="{{ 'active' if request.endpoint == 'main.verify' else '' }}"><a href="{{ url_for('main.verify') }}" class="nav-link"><i class="fas fa-check-circle"></i> Verify</a></li>
+                            {% endif %}
+                            <li><a href="{{ url_for('main.logout') }}" class="nav-link"><i class="fas fa-sign-out-alt"></i> Logout ({{ current_user.username }})</a></li>
+                        {% else %}
+                            <li class="{{ 'active' if request.endpoint == 'main.login' else '' }}"><a href="{{ url_for('main.login') }}" class="nav-link"><i class="fas fa-sign-in-alt"></i> Login</a></li>
                         {% endif %}
-                        <li><a href="{{ url_for('main.logout') }}" class="nav-link"><i class="fas fa-sign-out-alt"></i> Logout ({{ current_user.username }})</a></li>
-                    {% else %}
-                        <li class="{{ 'active' if request.endpoint == 'main.login' else '' }}"><a href="{{ url_for('main.login') }}" class="nav-link"><i class="fas fa-sign-in-alt"></i> Login</a></li>
-                        <li class="{{ 'active' if request.endpoint == 'main.register' else '' }}"><a href="{{ url_for('main.register') }}" class="nav-link"><i class="fas fa-user-plus"></i> Register</a></li>
-                    {% endif %}
-                    {# --- End Auth Links --- #}
-                </ul>
-            </nav>
+                    </ul>
+                </nav>
+                {# Dark Mode Toggle AFTER Nav #}
+                <button class="dark-mode-toggle" id="darkModeToggle" title="Toggle dark mode">
+                    <i class="fas fa-moon"></i> {# Icon set by JS #}
+                </button>
+                {# Mobile Toggle AFTER Dark Mode Toggle #}
+                <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false">
+                    <span></span><span></span><span></span>
+                </button>
+            </div>
+            {# --- END FIX 3: Header Right Wrapper --- #}
         </div>
     </header>
 
@@ -103,57 +128,46 @@
 
     {# --- Base Template JavaScript (e.g., mobile menu, flash close, dynamic year) --- #}
     <script>
-        (function() { // IIFE to avoid polluting global scope
+        // --- Dark Mode Logic (REVISED to sync with early script) ---
+        (function() { // IIFE
             const toggleButton = document.getElementById('darkModeToggle');
-            const body = document.body;
-            const html = document.documentElement; // Target <html> tag for data-theme
+            const html = document.documentElement; // Target HTML tag
             const sunIcon = '<i class="fas fa-sun"></i>';
             const moonIcon = '<i class="fas fa-moon"></i>';
 
-            // Function to set the theme
-            function setTheme(theme) {
-                if (theme === 'dark') {
-                    body.classList.add('dark-mode');
-                    html.setAttribute('data-theme', 'dark');
-                    toggleButton.innerHTML = sunIcon; // Show sun in dark mode
-                    localStorage.setItem('theme', 'dark');
-                } else {
-                    body.classList.remove('dark-mode');
-                    html.setAttribute('data-theme', 'light');
-                    toggleButton.innerHTML = moonIcon; // Show moon in light mode
-                    localStorage.setItem('theme', 'light');
-                }
+            function applyTheme(theme) {
+                 // Apply class to HTML tag (body class can be optional now)
+                 html.classList.toggle('dark-mode', theme === 'dark');
+                 // Set data-theme attribute (useful for CSS [data-theme='dark'] selectors)
+                 html.setAttribute('data-theme', theme);
+                 // Update toggle button icon
+                 if (toggleButton) { toggleButton.innerHTML = theme === 'dark' ? sunIcon : moonIcon; }
+                 // Save preference
+                 try { localStorage.setItem('theme', theme); } catch (e) {}
+                 // Update Map Theme if function exists
+                 if (typeof setMapTheme === 'function') { setMapTheme(theme); }
             }
-
-            // Check local storage for saved theme preference
-            const savedTheme = localStorage.getItem('theme');
-            // Check prefers-color-scheme media query
-            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-
-            // Determine initial theme: saved theme > OS preference > default (light)
-            const initialTheme = savedTheme || (prefersDark ? 'dark' : 'light');
-            setTheme(initialTheme); // Apply initial theme on load
 
             // Add click listener to the toggle button
             if (toggleButton) {
+                // Set initial button icon based on attribute set by early script
+                toggleButton.innerHTML = html.getAttribute('data-theme') === 'dark' ? sunIcon : moonIcon;
+                // Add click listener
                 toggleButton.addEventListener('click', () => {
-                    const currentTheme = html.getAttribute('data-theme');
-                    setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+                    const newTheme = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+                    applyTheme(newTheme);
                 });
-            } else {
-                 console.warn("Dark mode toggle button not found.");
-            }
+            } else { console.warn("Dark mode toggle button not found."); }
 
-            // Optional: Listen for changes in OS preference
+            // Listen for OS preference changes (optional)
             window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
-                 // Only change if no theme explicitly saved by user
-                 if (!localStorage.getItem('theme')) {
-                     setTheme(event.matches ? 'dark' : 'light');
+                 if (!localStorage.getItem('theme')) { // Only apply if user hasn't set preference
+                     applyTheme(event.matches ? 'dark' : 'light');
                  }
             });
-        })(); // End IIFE
-    </script>
-    <script>
+        })();
+        // --- End Dark Mode Logic ---
+
         // Basic Mobile Menu Toggle
         document.addEventListener('DOMContentLoaded', function() {
             const menuToggle = document.querySelector('.mobile-menu-toggle');
@@ -188,6 +202,15 @@
             if (yearElement) {
                 yearElement.innerHTML = `© ${new Date().getFullYear()} DisasterTrack. All rights reserved.`;
             }
+            const currentPath = window.location.pathname;
+            document.querySelectorAll('.main-nav .nav-link').forEach(link => {
+                if (link.getAttribute('href') === currentPath) {
+                    link.closest('li').classList.add('active');
+                } 
+                else {
+                    link.closest('li').classList.remove('active');
+                }
+            });
         });
     </script>
 </body>
