@@ -58,7 +58,10 @@ function initMap() {
             // --- Use Leaflet defaults for wrapping ---
             worldCopyJump: true, // This is the default and enables wrapping jump
             // --- REMOVE maxBounds ---
-            // maxBounds: [[-85...],[85...]],
+            maxBounds: [
+                [-85.05112878, -360.0], // Allow panning far left (multiple wraps)
+                [85.05112878, 360.0]   // Allow panning far right (multiple wraps)
+            ],
             // maxBoundsViscosity: 1.0,
         });
 
