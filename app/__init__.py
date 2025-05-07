@@ -11,7 +11,8 @@ from flask_caching import Cache
 # Import the config dictionary directly
 from config import config as app_configs
 # --- ADD Import for MetaData ---
-from sqlalchemy import MetaData
+from sqlalchemy import MetaData, func, select
+from sqlalchemy.orm import aliased
 
 # --- Import click HERE, before it's used by the CLI command ---
 # We put it in a try-except in case it's not installed, though it's a Flask dependency
@@ -124,11 +125,25 @@ def create_app(config_name=None):
 
     # (Keep Shell Context Processor)
     @app.shell_context_processor
-    def make_shell_context(): ...
+    def make_shell_context(): 
+        
+        # Import models and db instance here so they are available in the shell
+        from .models import User, DisasterReport, Disaster # Ensure these are correct model names
+        # from . import db # db is already in the global scope of __init__.py
+                            # but it's good practice to include it explicitly if needed
+        
+        return {
+            'db': db,
+            'User': User,
+            'DisasterReport': DisasterReport,
+            'Disaster': Disaster
+            # Add any other models or utilities you want in the shell
+        }
 
 
     # --- CLI Commands ---
-    # Define fetch-data command
+
+    # --- Define fetch-data command (always available) ---
     @app.cli.command("fetch-data")
     def fetch_data_command():
         """Runs the async data fetchers."""
@@ -139,8 +154,10 @@ def create_app(config_name=None):
             asyncio.run(run_fetchers_async())
         print("Data fetching finished.")
 
-    # Define create-admin command *only if click was imported successfully*
-    if click:
+    # --- Register click-dependent commands together ---
+    if click: # Single check if click is available
+
+        # --- Define create-admin command ---
         @app.cli.command("create-admin")
         @click.argument("username")
         @click.argument("email")
@@ -163,19 +180,186 @@ def create_app(config_name=None):
                 print(f"Admin user '{username}' created successfully.")
             except Exception as e:
                 db.session.rollback()
-                # Use logger if available, otherwise print
                 log_func = getattr(current_app, 'logger', None)
                 if log_func:
                      log_func.error(f"Error creating admin user: {e}", exc_info=True)
                 else:
                      print(f"Error creating admin user: {e}")
                 print("Admin creation failed.")
+
+        @app.cli.command("delete-unstable-firms-ids")
+        @click.option('--dry-run', is_flag=True, help='Show count of reports to be deleted but do not delete.')
+        @click.option('--yes', is_flag=True, help='Skip confirmation prompt.')
+        def delete_unstable_firms_ids(dry_run, yes):
+            """
+            Deletes NASA_FIRMS reports whose source_event_id does not appear
+            to match the stable format (firms_SAT_LAT_LON_DATE_TIME).
+            USE WITH EXTREME CAUTION. BACKUP YOUR DB FIRST.
+            """
+            from .models import DisasterReport
+            from sqlalchemy import delete
+            import re # For regex matching
+
+            print("Starting unstable FIRMS ID deletion check...")
+            source_to_check = 'NASA_FIRMS'
+        
+            # Regex to identify the STABLE ID format.
+            # It looks for: firms_ANYTHING_FLOAT_FLOAT_DATE_TIME
+            # This is a basic regex; adjust SATELLITE_SOURCE part if needed.
+            # Example: firms_VIIRS_SNPP_NRT_12.3456_-78.9012_2023-10-26_1430
+            stable_id_pattern = re.compile(
+                r"firms_[A-Z0-9_]+_-?\d{1,2}\.\d{4}_-?\d{1,3}\.\d{4}_\d{4}-\d{2}-\d{2}_\d{4}"
+            )
+
+            ids_to_delete = []
+            try:
+                with app.app_context():
+                    # Fetch all NASA_FIRMS reports
+                    all_firms_reports = db.session.query(DisasterReport.id, DisasterReport.source_event_id)\
+                                            .filter(DisasterReport.source == source_to_check).all()
+
+                    if not all_firms_reports:
+                        print("No NASA_FIRMS reports found in the database.")
+                        return
+
+                    print(f"Checking {len(all_firms_reports)} FIRMS reports for unstable ID format...")
+
+                    for report_id, source_event_id_val in all_firms_reports:
+                        if not source_event_id_val or not stable_id_pattern.fullmatch(source_event_id_val):
+                            ids_to_delete.append(report_id)
+                            # if len(ids_to_delete) < 20: # Log first few to be deleted
+                            #     print(f"  Marking for deletion (unstable ID): {report_id} - {source_event_id_val}")
+
+
+                    count = len(ids_to_delete)
+
+                    if count == 0:
+                        print("No FIRMS reports with unstable ID format found to delete.")
+                        return
+
+                    print(f"Found {count} FIRMS reports with unstable ID format to delete.")
+                    if dry_run:
+                        print("Sample IDs to be deleted:", ids_to_delete[:20])
+                        print("Dry run finished. No changes made.")
+                        return
+
+                    if not yes:
+                        click.confirm(f'Proceed with deleting {count} unstable-ID FIRMS reports?', abort=True)
+
+                    print(f"Deleting {count} unstable-ID FIRMS reports...")
+                    if ids_to_delete:
+                        chunk_size = 500
+                        deleted_count_total = 0
+                        for i in range(0, len(ids_to_delete), chunk_size):
+                            chunk = ids_to_delete[i:i + chunk_size]
+                            stmt_delete = delete(DisasterReport)\
+                                        .where(DisasterReport.id.in_(chunk))\
+                                        .execution_options(synchronize_session=False)
+                            result = db.session.execute(stmt_delete)
+                            deleted_count_total += result.rowcount
+                        db.session.commit()
+                        print(f"Successfully deleted {deleted_count_total} reports.")
+                    else:
+                        print("No reports to delete.")
+            except Exception as e:
+                db.session.rollback()
+                from flask import current_app
+                current_app.logger.error(f"Error deleting unstable FIRMS IDs: {e}", exc_info=True)
+                print(f"An error occurred: {e}")
+
+        # --- Define clean-firms-duplicates command (INSIDE the same 'if click:') ---
+        @app.cli.command("clean-firms-duplicates")
+        @click.option('--dry-run', is_flag=True, help='Show duplicates but do not delete.')
+        @click.option('--yes', is_flag=True, help='Skip confirmation prompt (use with caution!).')
+        def clean_firms_duplicates(dry_run, yes):
+            """Finds and optionally removes duplicate NASA_FIRMS reports based on source_event_id."""
+            from .models import DisasterReport # Import model inside command
+            # Import necessary SQLAlchemy components for this command
+            from sqlalchemy import delete, func, select
+
+            print("Starting FIRMS duplicate check...")
+            source_to_check = 'NASA_FIRMS'
+
+            try:
+                with app.app_context(): # Ensure we are in app context for DB session
+
+                    # 1. Define the window function
+                    row_number_window = func.row_number().over(
+                        partition_by=(DisasterReport.source, DisasterReport.source_event_id),
+                        order_by=DisasterReport.id.asc() # Keep the one with the lowest ID
+                    ).label('row_num')
+
+                    # 2. Create a subquery
+                    subq = select(
+                               DisasterReport.id,
+                               row_number_window
+                           )\
+                           .where(DisasterReport.source == source_to_check)\
+                           .subquery('ranked_firms_reports')
+
+                    # 3. Select the IDs of the reports to DELETE
+                    stmt_select_ids_to_delete = select(subq.c.id).where(subq.c.row_num > 1)
+
+                    # Execute the selection query to find IDs
+                    duplicate_ids_result = db.session.execute(stmt_select_ids_to_delete).scalars().all()
+                    duplicate_ids = list(duplicate_ids_result) # Convert to list
+                    count = len(duplicate_ids)
+
+                    # Handle the "No Duplicates Found" case first
+                    if count == 0:
+                        print("No duplicate FIRMS reports found based on source_event_id.")
+                        return # Exit cleanly
+
+                    # Code below only runs if count > 0
+                    print(f"Found {count} duplicate FIRMS report entries to remove.")
+
+                    # Handle the "Dry Run" case next
+                    if dry_run:
+                        # Optionally print some IDs for confirmation during dry run
+                        print("Duplicate IDs (sample):", duplicate_ids[:20]) # Show first 20
+                        print("Dry run finished. No changes made.")
+                        return # Exit after showing info
+
+                    # Code below only runs if count > 0 AND it's NOT a dry run
+
+                    # Confirmation prompt (only if not dry run)
+                    if not yes:
+                        click.confirm(f'Proceed with deleting {count} duplicate report entries?', abort=True)
+
+                    # Execute the DELETE operation
+                    print(f"Deleting {count} duplicate FIRMS reports...")
+                    # Use synchronize_session=False for potentially better performance on bulk deletes
+                    stmt_delete = delete(DisasterReport)\
+                                  .where(DisasterReport.id.in_(duplicate_ids))\
+                                  .execution_options(synchronize_session=False)
+
+                    result = db.session.execute(stmt_delete)
+                    db.session.commit()
+                    print(f"Successfully deleted {result.rowcount} duplicate reports.") # rowcount gives affected rows
+
+            except Exception as e:
+                from flask import current_app
+                db.session.rollback() # Rollback on error
+                print(f"An error occurred: {e}")
+                # Log the error as well
+                log_func = getattr(current_app, 'logger', None)
+                if log_func: log_func.error(f"Error cleaning FIRMS duplicates: {e}", exc_info=True)
+                print("Operation failed and was rolled back.")
+
+    # --- The SINGLE 'else' block for when 'click' is NOT available ---
     else:
-        # Optional: Log a warning if click isn't available and command can't be registered
-        app.logger.warning("Package 'click' not found. Skipping registration of 'create-admin' command.")
+        # Optional: Log a general warning if click isn't available
+        # Note: Using app.logger here might not work if called before app logging is fully configured.
+        # A print statement might be more reliable at this stage if needed.
+        # print("WARNING: Package 'click' not found. Skipping registration of click-dependent CLI commands.")
+        pass # Or log using app.logger if configured early enough
+
+    # --- End of CLI Commands Section ---
+
+    return app # Keep returning app from factory
+   
 
 
-    return app
 
 
 # --- Error Handler Registration Function ---

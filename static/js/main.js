@@ -32,12 +32,12 @@ function setupEventHandlers() {
     
     // Report form submission
     const reportForm = document.getElementById('disaster-report-form');
-    if (reportForm) {
-        reportForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            submitDisasterReport(this);
-        });
-    }
+    //if (reportForm) {
+       // reportForm.addEventListener('submit', function(e) {
+            //e.preventDefault();
+            //submitDisasterReport(this);
+        //});
+    //}
     
     // Subscription form for alerts
     const alertForm = document.getElementById('alert-subscription-form');

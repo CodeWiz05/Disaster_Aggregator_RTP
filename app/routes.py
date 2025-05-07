@@ -91,10 +91,7 @@ def get_disasters():
 
 # --- Keep remaining routes ---
 # ... (report, verify, process_verification, history, login, is_safe_url, logout, register) ...
-
-
-# --- Keep remaining routes ---
-# ... (report, verify, process_verification, history, login, is_safe_url, logout, register) ...
+    
 
 # --- User Report Submission (Login Required) ---
 @main_bp.route('/report', methods=['GET', 'POST'])
@@ -168,7 +165,8 @@ def report():
                 severity=severity,
                 source='UserReport',
                 verified=False, # User reports start unverified
-                user_id=current_user.id # Link to logged-in user
+                user_id=current_user.id, # Link to logged-in user
+                status='pending' #Explicitly set, or rely on default
             )
             db.session.add(new_report)
             db.session.commit()
@@ -187,99 +185,123 @@ def report():
     return render_template('report_form.html', title='Submit Report', form_data={})
 
 
-# --- Admin Verification Panel (Login and Admin Required) ---
+# --- Admin Verification Panel (GET Request - Renders the page) ---
 @main_bp.route('/verify')
-@login_required # User must be logged in
-@admin_required # User must also be admin
+@login_required
+@admin_required
 def verify():
-    """Admin panel to view and verify user-submitted reports."""
+    """Admin panel page - HTML is rendered, JS will fetch data."""
+    # No need to pass reports here anymore, JS will fetch them.
+    return render_template('verify_panel.html', title='Verify Reports')
+
+# --- NEW API Endpoint: Get Unverified Reports ---
+@main_bp.route('/api/unverified_reports')
+@login_required
+@admin_required
+@limiter.limit("60 per minute") # Add rate limit if desired
+def get_unverified_reports():
+    """API endpoint to fetch unverified user-submitted reports."""
+    current_app.logger.info(f"Admin '{current_user.username}' requested unverified reports.")
     try:
-        # Fetch unverified reports submitted by users
         reports_to_verify = DisasterReport.query.filter_by(
-            verified=False,
-            source='UserReport'
-            # Optionally add filter for status != 'spam' or 'rejected' if using status field
+            source='UserReport',
+            status='pending' # MODIFIED: Only fetch 'pending' status
+            # Optional: Add filter for status != 'spam' or 'rejected' if using a status field
         ).order_by(DisasterReport.timestamp.asc()).all() # Show oldest first
 
-        return render_template('verify_panel.html', title='Verify Reports', reports=reports_to_verify)
+        reports_data = [report.to_dict() for report in reports_to_verify]
+        current_app.logger.debug(f"Found {len(reports_data)} unverified reports.")
+        return jsonify(reports_data)
+
     except Exception as e:
-        current_app.logger.error(f"Error fetching reports for verification: {e}", exc_info=True)
-        flash('Error loading verification panel.', 'danger')
-        return redirect(url_for('main.index'))
+        current_app.logger.error(f"Error fetching reports for verification API: {e}", exc_info=True)
+        # Return a JSON error response for the API
+        return jsonify(error="Failed to fetch reports", message=str(e)), 500
 
 
-# --- Process Verification Action (Login and Admin Required) ---
+# --- Process Verification Action (POST Request - Updated slightly for clarity) ---
 @main_bp.route('/verify/<int:report_id>', methods=['POST'])
-@login_required # User must be logged in
-@admin_required # User must also be admin
+@login_required
+@admin_required
 def process_verification(report_id):
     """Handles the POST request from the verification panel (Verify/Reject/Spam)."""
-    # Use db.session.get for optimized primary key lookup
     report = db.session.get(DisasterReport, report_id)
     if not report:
-        flash(f'Report ID {report_id} not found.', 'error')
-        return redirect(url_for('main.verify'))
-    # Ensure it's a user report we are manually verifying
-    if report.source != 'UserReport':
-         flash(f'Report ID {report_id} is not a user report and cannot be manually processed here.', 'warning')
-         return redirect(url_for('main.verify'))
+        # Return JSON error for AJAX, or keep flash/redirect if JS handles it
+        # flash(f'Report ID {report_id} not found.', 'error')
+        # return redirect(url_for('main.verify'))
+        return jsonify(success=False, message=f'Report ID {report_id} not found.'), 404
 
-    action = request.form.get('action') # e.g., 'verify', 'reject', 'spam' from form
+    if report.source != 'UserReport':
+         # flash(f'Report ID {report_id} is not a user report...', 'warning')
+         # return redirect(url_for('main.verify'))
+        return jsonify(success=False, message=f'Report ID {report_id} is not a user report.'), 400
+
+    action = request.form.get('action') # Still expecting form data from JS fetch
+    if not action:
+        return jsonify(success=False, message='Missing action parameter.'), 400
+
     needs_cache_invalidation = False
+    action_performed_message = "" # Message for successful action
 
     try:
+        original_verified_status = report.verified # Store original for cache check
         if action == 'verify':
-            if not report.verified: # Only invalidate if status actually changes
-                needs_cache_invalidation = True
+            if not report.verified: needs_cache_invalidation = True
             report.verified = True
-            # --- Attempt to link to or create a Disaster event ---
-            # find_or_create adds objects to session but doesn't commit
+            report.status = 'verified_agg' # New status for user reports verified by admin
             disaster_event = find_or_create_disaster_event(report)
             if disaster_event:
-                 flash(f'Report {report_id} verified and linked/updated event {disaster_event.id}.', 'success')
+                action_performed_message = f'Report {report_id} verified and linked/updated event {disaster_event.id}.'
             else:
-                 flash(f'Report {report_id} verified, but could not be linked to an aggregate event.', 'warning')
+                # Still verified, but linking failed - might be a warning level?
+                action_performed_message = f'Report {report_id} verified, but failed to link to an aggregate event.'
+                # Consider if this should be a 200 OK with warning or different status
 
         elif action == 'reject':
-            if report.verified: # Only invalidate if status changes
-                 needs_cache_invalidation = True
-            report.verified = False # Mark as not verified
-            # Optional: Unlink from disaster event if needed
+            if report.verified: needs_cache_invalidation = True
+            report.verified = False
+            report.status = 'rejected' # Mark as not verified (can be resubmitted/reconsidered?)
+            # Optional: Unlink if previously linked (though unlikely for unverified)
             # if report.disaster_id: report.disaster_id = None
             db.session.add(report) # Ensure change is tracked
-            flash(f'Report {report_id} marked as rejected.', 'warning')
+            action_performed_message = f'Report {report_id} marked as rejected.'
 
         elif action == 'spam':
-            if report.verified: # Only invalidate if status changes
-                 needs_cache_invalidation = True
+            # Treat spam same as reject for now (mark unverified)
+            # We might later add a specific 'status' field or delete spam
+            if report.verified: needs_cache_invalidation = True
             report.verified = False
-            # Optional: Unlink from event
-            # if report.disaster_id: report.disaster_id = None
-            # Optional: Delete spam report entirely
+            report.status = 'spam'
+            db.session.add(report)
+            action_performed_message = f'Report {report_id} marked as spam.'
+            # Optional: Consider deleting spam reports immediately
             # db.session.delete(report)
-            # flash(f'Report {report_id} marked as spam and deleted.', 'danger')
-            db.session.add(report) # Track change if only marking verified=False
-            flash(f'Report {report_id} marked as spam.', 'danger')
+            # action_performed_message = f'Report {report_id} marked as spam and deleted.'
         else:
-            flash('Invalid verification action specified.', 'error')
-            # No DB changes needed if action is invalid
-            return redirect(url_for('main.verify'))
+            return jsonify(success=False, message='Invalid verification action specified.'), 400
 
+        # Check if the public 'verified' status changed
+        if original_verified_status != report.verified:
+            needs_cache_invalidation = True
+        
         # Commit all changes for this action transactionally
         db.session.commit()
         current_app.logger.info(f"Admin '{current_user.username}' performed action '{action}' on report {report_id}.")
 
-
-        # --- Invalidate API Cache only if verification status might have changed public data ---
+        # Invalidate Cache only if verification status might have changed public data
         if needs_cache_invalidation:
-             invalidate_disaster_api_cache()
+            current_app.logger.info(f"Action '{action}' triggered cache invalidation for report {report_id}.")
+            invalidate_disaster_api_cache()
+
+        # Return JSON success for AJAX call
+        return jsonify(success=True, message=action_performed_message)
 
     except Exception as e:
-        db.session.rollback() # Rollback on any error during processing or commit
+        db.session.rollback()
         current_app.logger.error(f"Error processing verification action '{action}' for report {report_id}: {e}", exc_info=True)
-        flash('An error occurred during verification processing.', 'danger')
-
-    return redirect(url_for('main.verify'))
+        # Return JSON error for AJAX call
+        return jsonify(success=False, message='An error occurred during verification processing.'), 500
 
 
 # --- Historical Data Viewer (Public) ---

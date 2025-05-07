@@ -236,6 +236,35 @@
         margin-bottom: 1rem;
         color: #bdc3c7;
     }
+    /* Add spinner style if needed */
+    .loading-spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid var(--secondary-color, #2196f3);
+        border-radius: 50%;
+        width: 25px;
+        height: 25px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 0.5rem;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .loading-row td { text-align: center; padding: 2rem; }
+    /* Optional: Subtle feedback on action */
+    .report-row.processing { opacity: 0.6; pointer-events: none; }
+    .feedback-message {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 5px;
+        z-index: 1050;
+        font-size: 0.9rem;
+        opacity: 0;
+        transition: opacity 0.3s ease-in-out;
+    }
+    .feedback-message.show { opacity: 1; }
 </style>
 {% endblock %}
 
@@ -268,18 +297,16 @@
                         <th>Description</th>
                         <th>Location</th>
                         <th>Severity</th>
-                        <th>Reported</th>
-                        <th>Contact</th>
+                        <th>Reported At</th>
+                        <th>Reporter ID</th> {# Changed from contact for privacy #}
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="reports-to-verify">
-                    <!-- Will be populated by JavaScript -->
-                    <tr>
-                        <td colspan="8" class="empty-state">
-                            <div class="empty-state-icon">
-                                <i class="fas fa-spinner fa-spin"></i>
-                            </div>
+                    {# Initial loading state - will be replaced by JS #}
+                    <tr class="loading-row">
+                        <td colspan="8">
+                            <div class="loading-spinner"></div>
                             <p>Loading reports...</p>
                         </td>
                     </tr>
@@ -302,190 +329,267 @@
             </div>
         </div>
     </div>
+
+    {# Optional: Element for feedback messages #}
+    <div id="feedback-message" class="feedback-message"></div>
 {% endblock %}
 
 {% block scripts %}
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            loadReportsForVerification();
-            
-            // Filter by type
-            document.getElementById('filter-type').addEventListener('change', function() {
-                loadReportsForVerification(this.value);
-            });
-            
-            // Close modal when clicking X
-            document.querySelector('.close-modal').addEventListener('click', function() {
-                document.getElementById('report-detail-modal').style.display = 'none';
-            });
-            
-            // Close modal when clicking outside
-            window.addEventListener('click', function(event) {
-                const modal = document.getElementById('report-detail-modal');
-                if (event.target === modal) {
-                    modal.style.display = 'none';
-                }
-            });
-            
-            // Set up modal action buttons
-            document.getElementById('verify-report').addEventListener('click', function() {
-                const reportId = this.getAttribute('data-report-id');
-                verifyReport(reportId, true);
-            });
-            
-            document.getElementById('reject-report').addEventListener('click', function() {
-                const reportId = this.getAttribute('data-report-id');
-                verifyReport(reportId, false);
-            });
-            
-            document.getElementById('request-more-info').addEventListener('click', function() {
-                const email = this.getAttribute('data-contact');
-                alert(`In a real implementation, this would send an email to ${email}`);
-            });
-        });
-        
-        function loadReportsForVerification(typeFilter = '') {
-            // In a real application, this would fetch from the server
-            // For demo purposes, we'll use dummy data
-            
-            // Simulate API call delay
-            setTimeout(function() {
-                const reports = [
-                    {
-                        "id": "user-rp-1005",
-                        "type": "flood", 
-                        "title": "Street flooding in downtown",
-                        "description": "Several streets in the downtown area are flooded after heavy rain.",
-                        "lat": 40.7128,
-                        "lng": -74.0060,
-                        "timestamp": new Date().toISOString(),
-                        "severity": 2,
-                        "verified": false,
-                        "source": "User Report",
-                        "contact": "anonymous@example.com"
-                    },
-                    {
-                        "id": "user-rp-1006",
-                        "type": "storm",
-                        "title": "Power outages from storm",
-                        "description": "Strong winds have knocked down power lines in the eastern suburbs.",
-                        "lat": 40.7328,
-                        "lng": -73.9860,
-                        "timestamp": new Date().toISOString(),
-                        "severity": 3,
-                        "verified": false,
-                        "source": "User Report",
-                        "contact": "resident@example.com"
-                    }
-                ];
-                
-                const tbody = document.getElementById('reports-to-verify');
-                tbody.innerHTML = '';
-                
-                // Apply filter if needed
-                const filteredReports = typeFilter ? 
-                    reports.filter(report => report.type === typeFilter) : 
-                    reports;
-                
-                if (filteredReports.length === 0) {
-                    tbody.innerHTML = `
-                        <tr>
-                            <td colspan="8" class="empty-state">
-                                <div class="empty-state-icon">
-                                    <i class="fas fa-search"></i>
-                                </div>
-                                <p>No reports found matching your criteria</p>
-                            </td>
-                        </tr>
-                    `;
-                    return;
-                }
-                
-                filteredReports.forEach(report => {
-                    const row = document.createElement('tr');
-                    
-                    // Create severity indicator
-                    let severityHtml = '<div class="severity-indicator">';
-                    for (let i = 1; i <= 5; i++) {
-                        severityHtml += `<span class="severity-dot ${i <= report.severity ? 'severity-active' : ''}"></span>`;
-                    }
-                    severityHtml += '</div>';
-                    
-                    row.innerHTML = `
-                        <td><span class="report-type-badge type-${report.type}">${report.type}</span></td>
-                        <td>${report.title}</td>
-                        <td>${report.description.substring(0, 50)}${report.description.length > 50 ? '...' : ''}</td>
-                        <td>${report.lat.toFixed(2)}, ${report.lng.toFixed(2)}</td>
-                        <td>${severityHtml}</td>
-                        <td>${new Date(report.timestamp).toLocaleString()}</td>
-                        <td>${report.contact}</td>
-                        <td>
-                            <button class="btn btn-view" data-report-id="${report.id}">View Details</button>
-                        </td>
-                    `;
-                    tbody.appendChild(row);
-                    
-                    // Add event listener to view button
-                    row.querySelector('.btn-view').addEventListener('click', function() {
-                        showReportDetail(report);
-                    });
-                });
-            }, 500);
+    // --- Simple HTML Sanitizer ---
+    function sanitizeHtml(str) {
+        if (typeof str !== 'string') return '';
+        const temp = document.createElement('div');
+        temp.textContent = str;
+        return temp.innerHTML;
+    }
+
+    // --- Show Feedback Message ---
+    function showFeedback(message, isError = false) {
+        const feedbackEl = document.getElementById('feedback-message');
+        if (!feedbackEl) return;
+        feedbackEl.textContent = message;
+        feedbackEl.style.backgroundColor = isError ? 'var(--danger, #dc3545)' : 'rgba(0, 0, 0, 0.8)';
+        feedbackEl.classList.add('show');
+        setTimeout(() => {
+            feedbackEl.classList.remove('show');
+        }, 3000); // Hide after 3 seconds
+    }
+
+    // --- Function to Fetch and Render Reports ---
+    async function loadReportsForVerification() {
+        const tbody = document.getElementById('reports-to-verify');
+        if (!tbody) {
+            console.error("Table body 'reports-to-verify' not found!");
+            return;
         }
-        
-        function showReportDetail(report) {
-            const modal = document.getElementById('report-detail-modal');
-            const content = document.getElementById('report-detail-content');
-            
-            // Create severity indicator
-            let severityHtml = '<div class="severity-indicator" style="margin: 10px 0;">';
-            for (let i = 1; i <= 5; i++) {
-                severityHtml += `<span class="severity-dot ${i <= report.severity ? 'severity-active' : ''}" style="width: 16px; height: 16px;"></span>`;
+
+        // --- Revised Loading State ---
+        // Define the loading row HTML
+        const loadingRowHtml = `
+            <tr class="loading-row">
+                <td colspan="8">
+                    <div class="loading-spinner"></div>
+                    <p>Loading reports...</p>
+                </td>
+            </tr>`;
+        // Set the loading state immediately
+        tbody.innerHTML = loadingRowHtml;
+        // --- End Revised Loading State ---
+
+        try {
+            const response = await fetch('/api/unverified_reports');
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: `HTTP error ${response.status}` }));
+                throw new Error(errorData.message || `Failed to fetch reports: ${response.statusText}`);
             }
-            severityHtml += ' <span style="margin-left: 10px;">' + 
-                (report.severity === 1 ? 'Minor' : 
-                report.severity === 2 ? 'Moderate' : 
-                report.severity === 3 ? 'Significant' : 
-                report.severity === 4 ? 'Severe' : 'Extreme') + '</span></div>';
-            
-            content.innerHTML = `
-                <h4>${report.title}</h4>
-                <p><span class="report-type-badge type-${report.type}" style="margin-right: 10px;">${report.type}</span>
-                <span class="status-badge status-pending">Pending Verification</span></p>
-                
-                <p><strong>Description:</strong> ${report.description}</p>
-                
-                <p><strong>Severity:</strong> ${severityHtml}</p>
-                
-                <p><strong>Location:</strong> ${report.lat.toFixed(4)}, ${report.lng.toFixed(4)}</p>
-                
-                <p><strong>Reported:</strong> ${new Date(report.timestamp).toLocaleString()}</p>
-                
-                <p><strong>Reporter Contact:</strong> ${report.contact}</p>
-                
-                <!-- If we had images, they would display here -->
-                <div class="report-media" style="margin-top: 20px; display: none;">
-                    <h5>Submitted Media</h5>
-                    <p class="helper-text">No media files were submitted with this report.</p>
-                </div>
-            `;
-            
-            // Set report ID for action buttons
-            document.getElementById('verify-report').setAttribute('data-report-id', report.id);
-            document.getElementById('reject-report').setAttribute('data-report-id', report.id);
-            document.getElementById('request-more-info').setAttribute('data-contact', report.contact);
-            
-            modal.style.display = 'block';
+
+            const reports = await response.json();
+
+            tbody.innerHTML = ''; // Clear loading row now
+
+            if (reports.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="8" class="empty-state">
+                            <div class="empty-state-icon"><i class="fas fa-check-circle"></i></div>
+                            <p>No reports currently awaiting verification.</p>
+                        </td>
+                    </tr>`;
+                return;
+            }
+
+            reports.forEach(report => {
+                const row = document.createElement('tr');
+                row.classList.add('report-row');
+                row.setAttribute('id', `report-row-${report.id}`); // Add ID to row
+
+                const type = report.type || 'other';
+                const severity = report.severity || 1;
+                let formattedTime = 'N/A';
+                try { formattedTime = report.timestamp ? new Date(report.timestamp).toLocaleString(undefined, {dateStyle: 'short', timeStyle: 'short'}) : 'N/A'; } catch(e) {}
+
+                // Use a simpler severity display or ensure badge styles exist
+                const severityHtml = `<span class="badge severity-${severity}" style="background-color: #ccc; color: #333; padding: 3px 6px; border-radius: 3px;">${severity}</span>`; // Basic example
+
+                row.innerHTML = `
+                    <td><span class="badge type-${type}">${sanitizeHtml(type)}</span></td>
+                    <td>${sanitizeHtml(report.title || 'N/A')}</td>
+                    <td>${sanitizeHtml(report.description || '').substring(0, 60)}${report.description && report.description.length > 60 ? '...' : ''}</td>
+                    <td>${report.lat?.toFixed(3)}, ${report.lng?.toFixed(3)}</td>
+                    <td>${severityHtml}</td>
+                    <td>${formattedTime}</td>
+                    <td>${report.user_id || 'N/A'}</td>
+                    <td class="actions-cell">
+                        <form class="action-form" method="POST"> {# Action removed, JS handles URL #}
+                            <input type="hidden" name="action" value="verify">
+                            <button type="submit" class="btn btn-success btn-sm verify-btn" data-report-id="${report.id}" title="Verify">
+                                <i class="fas fa-check"></i> Verify
+                            </button>
+                        </form>
+                        <form class="action-form" method="POST"> {# Action removed #}
+                             <input type="hidden" name="action" value="reject">
+                             <button type="submit" class="btn btn-warning btn-sm reject-btn" data-report-id="${report.id}" title="Reject">
+                                 <i class="fas fa-times"></i> Reject
+                             </button>
+                        </form>
+                         <form class="action-form" method="POST"> {# Action removed #}
+                             <input type="hidden" name="action" value="spam">
+                             <button type="submit" class="btn btn-danger btn-sm spam-btn" data-report-id="${report.id}" title="Mark as Spam">
+                                 <i class="fas fa-ban"></i> Spam
+                             </button>
+                         </form>
+                    </td>
+                `;
+                tbody.appendChild(row); // Append the created row
+            });
+
+        } catch (error) {
+            console.error("Error loading reports:", error);
+            // Clear loading row and display error message
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="8" class="empty-state" style="color: var(--danger, #dc3545);">
+                         <div class="empty-state-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                         <p>Error loading reports: ${error.message}</p>
+                    </td>
+                </tr>`;
         }
-        
-        function verifyReport(reportId, isVerified) {
-            // In a real app, this would send an AJAX request to the server
-            alert(`Report ${reportId} has been ${isVerified ? 'verified' : 'rejected'}`);
-            document.getElementById('report-detail-modal').style.display = 'none';
-            
-            // Refresh the list
-            const typeFilter = document.getElementById('filter-type').value;
-            loadReportsForVerification(typeFilter);
+    }
+
+    // --- Function to Handle Action Form Submission ---
+    async function handleActionSubmit(event) {
+        event.preventDefault(); // Prevent default form submission
+        const form = event.target;
+        const button = form.querySelector('button[type="submit"]');
+        const reportId = button.getAttribute('data-report-id');
+        const action = form.querySelector('input[name="action"]').value;
+        const row = document.getElementById(`report-row-${reportId}`);
+        // --- LOGGING POINT 1 ---
+        console.log(`Attempting to find row with ID: report-row-${reportId}`);
+        // --- LOGGING POINT 2 ---
+        console.log("Found row element:", row); // See if 'row' is null or an element
+        // --- Explicitly construct the target URL ---
+        const targetUrl = `/verify/${reportId}`;
+
+        if (!reportId || !action) {
+            console.error("Missing reportId or action");
+            showFeedback("Internal error: Missing report ID or action.", true);
+            return;
         }
+
+        if (!targetUrl.includes(reportId)) { // Basic sanity check
+            console.error("Failed to construct valid target URL:", targetUrl);
+            showFeedback("Internal error: Failed to construct URL.", true);
+            return;
+        }
+
+        // Optional: Add visual feedback
+        if(row) row.classList.add('processing');
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; // Show spinner
+
+        try {
+            const formData = new FormData(form); // Still use FormData to get the 'action' value
+            console.log("Sending action:", action, "to URL:", targetUrl); // Add log
+
+            // --- Use the explicitly constructed URL ---
+            const response = await fetch(targetUrl, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    // 'X-CSRFToken': '...' // TODO: Add CSRF token
+                }
+            });
+            // ------------------------------------------
+
+            // --- Robust Response Handling ---
+            // Check if response is OK (status 200-299)
+            if (!response.ok) {
+                 // Attempt to parse error JSON, fallback to text
+                 let errorMsg = `Request failed with status ${response.status}`;
+                 try {
+                     const errorData = await response.json();
+                     errorMsg = errorData.message || JSON.stringify(errorData);
+                 } catch (jsonError) {
+                     try {
+                          // If not JSON, maybe it's plain text
+                          const textError = await response.text();
+                          // Avoid showing full HTML page as error
+                          if (textError && !textError.trim().toLowerCase().startsWith('<!doctype')) {
+                              errorMsg = textError.substring(0, 200); // Limit length
+                          }
+                     } catch (textError) { /* Ignore if text reading fails too */ }
+                 }
+                 throw new Error(errorMsg); // Throw the extracted or default error message
+            }
+
+            // Only parse JSON if response.ok is true
+            const result = await response.json();
+            // -------------------------------
+
+            // Check application-level success from JSON
+            if (result.success) {
+                showFeedback(result.message || `Report ${reportId} action '${action}' successful.`);
+                // Remove the row from the table visually
+                if (row) {
+                    // --- LOGGING POINT 3 ---
+                    console.log(`Row report-row-${reportId} found. Preparing to remove.`);
+                    row.style.transition = 'opacity 0.5s ease-out';
+                    row.style.opacity = '0';
+                    setTimeout(() => {
+                        // --- LOGGING POINT 4 ---
+                        console.log(`Executing row.remove() for report-row-${reportId}.`);
+                        row.remove();
+                        const tbody = document.getElementById('reports-to-verify');
+                        if (tbody && tbody.childElementCount === 0) {
+                            loadReportsForVerification(); // Reload to show empty message
+                        }
+                    }, 500); // Remove after fade
+                } 
+                else {
+                    // --- LOGGING POINT 5 ---
+                    console.error(`Row report-row-${reportId} NOT found. Reloading reports as fallback.`);
+                    loadReportsForVerification(); // Fallback: reload if row not found
+                }
+            } else {
+                // Throw error if success field in JSON is false
+                throw new Error(result.message || `Action '${action}' failed for report ${reportId}.`);
+            }
+
+        } catch (error) {
+            console.error(`Error performing action '${action}' on report ${reportId}:`, error);
+            showFeedback(`Error: ${error.message || 'Unknown error occurred.'}`, true); // Show feedback
+            // Re-enable button and remove processing state on error
+             if(row) row.classList.remove('processing');
+             if(button) { // Check if button exists
+                 button.disabled = false;
+                 // Restore original button text
+                 if (action === 'verify') button.innerHTML = '<i class="fas fa-check"></i> Verify';
+                 else if (action === 'reject') button.innerHTML = '<i class="fas fa-times"></i> Reject';
+                 else if (action === 'spam') button.innerHTML = '<i class="fas fa-ban"></i> Spam';
+             }
+        }
+    }
+
+    // --- Attach Event Listener using Delegation ---
+    document.addEventListener('DOMContentLoaded', function() {
+        const tbody = document.getElementById('reports-to-verify');
+        if (tbody) {
+            // Listen for submit events bubbling up from forms inside the tbody
+            tbody.addEventListener('submit', function(event) {
+                // Check if the submission came from one of our action forms
+                if (event.target.classList.contains('action-form')) {
+                    handleActionSubmit(event);
+                }
+            });
+        } else {
+            console.error("Verification table body not found!");
+        }
+
+        // Initial load of reports
+        loadReportsForVerification();
+    });
     </script>
 {% endblock %}

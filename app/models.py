@@ -61,12 +61,18 @@ class DisasterReport(db.Model):
 
     disaster_id = db.Column(db.Integer, db.ForeignKey('disaster.id'), nullable=True, index=True)
 
+    # --- NEW STATUS FIELD ---
+    # Possible values: 'pending', 'verified_agg', 'rejected', 'spam', 'api_verified' (for API sources)
+    status = db.Column(db.String(32), default='pending', index=True, nullable=False)
+    # -----------------------
+
+
     disaster = db.relationship('Disaster', back_populates='reports')
     author = db.relationship('User', back_populates='reports')
 
     def __repr__(self):
-        verified_status = "Verified" if self.verified else "Unverified"
-        return f'<Report {self.id}: {self.title} ({self.source} - {verified_status})>'
+        # Use status field in repr for better clarity
+        return f'<Report {self.id}: {self.title} ({self.source} - {self.status})>'
 
     def to_dict(self):
         ts_iso = None
@@ -104,7 +110,8 @@ class DisasterReport(db.Model):
             'magnitude': self.magnitude,
             'depth_km': self.depth_km,
             'user_id': self.user_id,
-            'disaster_event_id': self.disaster_id
+            'disaster_event_id': self.disaster_id,
+            'status': self.status # Add status to the dictionary
         }
 
 

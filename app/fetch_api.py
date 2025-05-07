@@ -105,7 +105,8 @@ async def fetch_usgs_earthquakes_async(client: httpx.AsyncClient):
                     timestamp=timestamp_dt,
                     severity=severity,
                     verified=True, # Trust USGS data
-                    source="USGS" # <<< SOURCE
+                    source="USGS", # <<< SOURCE
+                    status='api_verified' # Set status for API-sourced reports
                 )
                 new_reports.append(report)
             except Exception as model_err:
@@ -234,8 +235,15 @@ async def fetch_nasa_firms_wildfires_async(client: httpx.AsyncClient):
                 brightness_str = row[col_indices['bright']]
                 timestamp_dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H%M").replace(tzinfo=timezone.utc)
 
-                # Create unique ID
-                source_event_id = f"firms_{SATELLITE_SOURCE}_{date_str}_{time_str}_{row_num+1}"
+                # Convert lat/lon immediately, handle potential errors here
+                lat = float(lat_str)
+                lon = float(lon_str)
+                # --- End Step 1 ---
+
+                # NEW STABLE ID GENERATION:
+                # Ensure lat, lon, date_str, time_str, SATELLITE_SOURCE are defined before this line
+                # Use 4 decimal places for lat/lon for reasonable precision (~11 meters)
+                source_event_id = f"firms_{SATELLITE_SOURCE}_{lat:.4f}_{lon:.4f}_{date_str}_{time_str}"
                 if source_event_id in processed_ids_in_batch: continue
                 processed_ids_in_batch.add(source_event_id)
 
@@ -254,17 +262,9 @@ async def fetch_nasa_firms_wildfires_async(client: httpx.AsyncClient):
                          continue # Skip if check fails
                 # --- END REVISED Check ---
 
-                lat = float(lat_str)
-                lon = float(lon_str)
-
                 # Create timestamp (ensure it's UTC)
                 dt_str = f"{date_str} {time_str}"
                 timestamp_dt = datetime.strptime(dt_str, "%Y-%m-%d %H%M").replace(tzinfo=timezone.utc)
-
-                # Create unique ID
-                source_event_id = f"firms_{SATELLITE_SOURCE}_{date_str}_{time_str}_{row_num+1}"
-                if source_event_id in processed_ids_in_batch: continue
-                processed_ids_in_batch.add(source_event_id)
 
                 # Check DB duplicate
                 source = "NASA_FIRMS"
@@ -316,14 +316,6 @@ async def fetch_nasa_firms_wildfires_async(client: httpx.AsyncClient):
                 title = f"Wildfire Detection ({confidence_str} confidence)"
                 description = f"Satellite hotspot detected near [{lat:.3f}, {lon:.3f}]. Brightness: {brightness_str}K."
 
-                # Create Model Instance
-                report = DisasterReport(
-                    source_event_id=source_event_id, title=title, description=description,
-                    disaster_type="wildfire", latitude=lat, longitude=lon,
-                    timestamp=timestamp_dt, severity=severity, verified=True, source=source
-                )
-                new_reports.append(report)
-
                 try:
                     brightness_k = float(brightness_str)
                     if brightness_k > 360: severity = max(severity, 5)
@@ -338,7 +330,7 @@ async def fetch_nasa_firms_wildfires_async(client: httpx.AsyncClient):
                 report = DisasterReport(
                     source_event_id=source_event_id, title=title, description=description,
                     disaster_type="wildfire", latitude=lat, longitude=lon,
-                    timestamp=timestamp_dt, severity=severity, verified=True, source=source
+                    timestamp=timestamp_dt, severity=severity, verified=True, source=source, status='api_verified' # Set status for API-sourced reports
                 )
                 new_reports.append(report)
 

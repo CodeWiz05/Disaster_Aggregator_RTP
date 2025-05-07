@@ -53,6 +53,54 @@ html[data-theme='dark'] { /* Or use html.dark-mode if preferred */
     /* ... other dark mode variables ... */
 }
 
+/* --- START: Dark Mode Table Overrides --- */
+html[data-theme='dark'] .data-table {
+    /* Base text color is already handled by body */
+}
+html[data-theme='dark'] .data-table th {
+    background-color: var(--table-header-bg); /* Already defined in dark vars */
+    color: var(--table-header-text);   /* Already defined in dark vars */
+    border-color: var(--border-default);
+}
+html[data-theme='dark'] .data-table td {
+    border-color: var(--border-default);
+    color: var(--text-primary); /* Explicitly set primary text color */
+}
+html[data-theme='dark'] .data-table tbody tr:nth-child(even) {
+    background-color: var(--table-row-even-bg); /* Use dark variable */
+}
+html[data-theme='dark'] .data-table tbody tr:hover {
+    background-color: var(--table-row-hover-bg); /* Use dark variable */
+}
+
+/* Dark Mode Badge Adjustments (Make text readable) */
+html[data-theme='dark'] .badge {
+    /* Option: Add subtle border */
+     border: 1px solid rgba(255, 255, 255, 0.2);
+}
+/* For badges with light text, they might be okay, but check contrast */
+html[data-theme='dark'] .badge.earthquake,
+html[data-theme='dark'] .badge.flood,
+html[data-theme='dark'] .badge.wildfire,
+html[data-theme='dark'] .badge.storm,
+html[data-theme='dark'] .badge.landslide,
+html[data-theme='dark'] .badge.other {
+     opacity: 0.9; /* Slightly fade if needed */
+}
+
+/* Dark Mode Severity Indicator Adjustments */
+html[data-theme='dark'] .severity-indicator {
+     border: 1px solid rgba(255, 255, 255, 0.1); /* Add border */
+}
+/* Adjust text color for light backgrounds in dark mode */
+html[data-theme='dark'] .severity-indicator.severity-1 { background-color: #2e7d32; } /* Darker Green */
+html[data-theme='dark'] .severity-indicator.severity-2 { background-color: #fbc02d; color: #212121;} /* Darker Yellow, dark text */
+html[data-theme='dark'] .severity-indicator.severity-3 { background-color: #f57c00; } /* Darker Orange */
+html[data-theme='dark'] .severity-indicator.severity-4 { background-color: #d32f2f; } /* Darker Red */
+html[data-theme='dark'] .severity-indicator.severity-5 { background-color: #b71c1c; } /* Stays Dark Red */
+
+/* --- END: Dark Mode Table Overrides --- */
+
 body.dark-mode {
     /* --- Dark Mode Theme Variable Overrides --- */
     --bg-primary: #212121;
@@ -323,7 +371,7 @@ textarea.form-control { min-height: 100px; resize: vertical; }
 
 /* --- START: Tables --- */
 .table-responsive { overflow-x: auto; margin-top: 1rem; box-shadow: 0 1px 3px var(--shadow-color); border-radius: 4px; border: 1px solid var(--border-default); }
-.data-table { width: 100%; border-collapse: collapse; background-color: var(--bg-secondary); }
+.data-table { width: 100%; border-collapse: collapse; background-color: var(--bg-secondary); color: var(--text-primary);}
 .data-table th, .data-table td { padding: 12px 15px; text-align: left; border-bottom: 1px solid var(--border-default); vertical-align: middle; white-space: nowrap; }
 .data-table th:first-child, .data-table td:first-child, /* Title */
 .data-table th:nth-child(5), .data-table td:nth-child(5) { white-space: normal; } /* Allow Title & Location wrap */
