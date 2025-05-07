@@ -13,7 +13,7 @@ from config import config as app_configs
 # --- ADD Import for MetaData ---
 from sqlalchemy import MetaData, func, select
 from sqlalchemy.orm import aliased
-
+from .logging_config import setup_logging
 # --- Import click HERE, before it's used by the CLI command ---
 # We put it in a try-except in case it's not installed, though it's a Flask dependency
 try:
@@ -99,10 +99,19 @@ def create_app(config_name=None):
     app = Flask(__name__,
                 static_folder='../static',
                 template_folder='../templates')
-    if config_name is None: ...
-    if config_name not in app_configs: ...
+    if config_name is None:
+        config_name = os.environ.get('FLASK_CONFIG') or 'default' # Get from env or use default
+    
+    if config_name not in app_configs:
+        # Option 1: Raise an error
+        # raise ValueError(f"Configuration '{config_name}' not found in app_configs. Available: {list(app_configs.keys())}")
+        # Option 2: Fallback to default if invalid
+        print(f"Warning: Configuration '{config_name}' not found. Falling back to 'default'.")
+        config_name = 'default'
     app.config.from_object(app_configs[config_name])
     print(f"Loaded config: {config_name}")
+    # --- SETUP LOGGING EARLY ---
+    setup_logging(app) # <--- CALL THE SETUP FUNCTION
 
     # (Keep extension initializations: db, migrate, cors, login, cache, limiter)
     # --- MODIFY Migrate initialization to pass db.metadata ---
@@ -126,7 +135,7 @@ def create_app(config_name=None):
     # (Keep Shell Context Processor)
     @app.shell_context_processor
     def make_shell_context(): 
-        
+
         # Import models and db instance here so they are available in the shell
         from .models import User, DisasterReport, Disaster # Ensure these are correct model names
         # from . import db # db is already in the global scope of __init__.py

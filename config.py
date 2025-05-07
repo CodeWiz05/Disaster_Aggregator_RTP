@@ -51,7 +51,7 @@ class BaseConfig:
     TWILIO_PHONE_NUMBER = os.environ.get('TWILIO_PHONE_NUMBER')
 
     # Logging configuration
-    LOG_DIR = os.path.join(basedir, '..', 'logs') # Log directory in project root
+    LOG_DIR = os.path.join(basedir, 'logs') # Log directory in project root
     LOG_FILE = os.path.join(LOG_DIR, 'app.log')
     LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO').upper()
 

@@ -34,7 +34,7 @@ def get_disasters():
     API endpoint to get the latest N (e.g., 100) verified disaster reports
     for EACH disaster type. Uses explicit join to avoid Cartesian warning.
     """
-    current_app.logger.info("Received request for /api/disasters (Top N per type - Explicit Join v3)")
+    current_app.api_logger.info(f"API Request: {request.method} {request.path} from {request.remote_addr} with args {request.args}")
     N = 100 # Number of latest reports per type to fetch
 
     try:
@@ -170,13 +170,15 @@ def report():
             )
             db.session.add(new_report)
             db.session.commit()
+            # ... after report is saved ...
+            current_app.user_logger.info(f"User '{current_user.username}' (ID: {current_user.id}) submitted report ID {new_report.id}, status '{new_report.status}'.")
 
             flash('Report submitted successfully! Awaiting verification.', 'success')
             return redirect(url_for('main.index'))
 
         except Exception as e:
             db.session.rollback() # Rollback on any error during processing
-            current_app.logger.error(f"Error saving user report for user {current_user.id}: {e}", exc_info=True)
+            current_app.error_logger.error(f"Error saving user report for user {current_user.id}: {e}", exc_info=True) # Use error_logger
             flash('An error occurred while submitting your report. Please try again.', 'danger')
             # Pass form data back
             return render_template('report_form.html', title='Submit Report', form_data=form_data), 500
@@ -287,7 +289,7 @@ def process_verification(report_id):
         
         # Commit all changes for this action transactionally
         db.session.commit()
-        current_app.logger.info(f"Admin '{current_user.username}' performed action '{action}' on report {report_id}.")
+        current_app.admin_logger.info(f"Admin '{current_user.username}' (ID: {current_user.id}) performed action '{action}' on report {report_id}. Status set to '{report.status}'.")
 
         # Invalidate Cache only if verification status might have changed public data
         if needs_cache_invalidation:
@@ -299,7 +301,7 @@ def process_verification(report_id):
 
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Error processing verification action '{action}' for report {report_id}: {e}", exc_info=True)
+        current_app.error_logger.error(f"Error processing verification action '{action}' for report {report_id}: {e}", exc_info=True) # Use error_logger
         # Return JSON error for AJAX call
         return jsonify(success=False, message='An error occurred during verification processing.'), 500
 
