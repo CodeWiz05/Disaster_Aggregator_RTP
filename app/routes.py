@@ -8,14 +8,15 @@ from . import db, limiter, cache, invalidate_disaster_api_cache
 from .models import DisasterReport, Disaster, User
 from .utils import sanitize_input, admin_required, find_or_create_disaster_event
 from urllib.parse import urlparse, urljoin
-from sqlalchemy import func, select, desc
+from sqlalchemy import func, select, desc, extract
 from sqlalchemy.orm import aliased
+from datetime import datetime, timezone
+import logging
 # -------------------------------------------------------
 
 # Keep main_bp definition
 main_bp = Blueprint('main', __name__)
 
-# Keep other routes (index, etc.)
 # Keep other routes (index, etc.)
 # --- Homepage / Dashboard (Public) ---
 @main_bp.route('/')
@@ -304,7 +305,284 @@ def process_verification(report_id):
         current_app.error_logger.error(f"Error processing verification action '{action}' for report {report_id}: {e}", exc_info=True) # Use error_logger
         # Return JSON error for AJAX call
         return jsonify(success=False, message='An error occurred during verification processing.'), 500
+    
+# --- NEW API Endpoint: Get Historical Reports (Filterable & Paginated) ---
+@main_bp.route('/api/history/reports')
+# @login_required # Decide if login is required for historical data
+@limiter.limit("120 per minute") # Adjust rate limit as needed
+def get_historical_reports():
+    current_app.api_logger.info(f"API Request: {request.method} {request.path} from {request.remote_addr} with args {request.args}")
 
+    try:
+        # --- 1. Get and Validate Query Parameters ---
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 25, type=int)
+        if per_page > 100: # Max per_page limit
+            per_page = 100
+        if page < 1:
+            page = 1
+
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+        disaster_type = request.args.get('type', 'all')
+        min_severity_str = request.args.get('min_severity')
+        # year_str = request.args.get('year') # For later
+
+        # --- 2. Build Base Query ---
+        # We want reports that are considered public/finalized
+        # Using verified=True is a good start.
+        # Or specific statuses: query = DisasterReport.query.filter(DisasterReport.status.in_(['verified_agg', 'api_verified']))
+        query = DisasterReport.query.filter(DisasterReport.verified == True)
+
+
+        # --- 3. Apply Filters ---
+        # Date Range Filter
+        if start_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, '%Y-%m-%d').replace(hour=0, minute=0, second=0, microsecond=0)
+                # Ensure timezone awareness if comparing with timezone-aware DB timestamps
+                # If your DB stores naive UTC, make start_date naive UTC too.
+                # If DB stores aware UTC, make start_date aware UTC.
+                # Assuming DB timestamp is aware UTC (from DateTime(timezone=True)):
+                start_date = start_date.replace(tzinfo=timezone.utc)
+                query = query.filter(DisasterReport.timestamp >= start_date)
+            except ValueError:
+                return jsonify(error="Invalid start_date format. Use YYYY-MM-DD."), 400
+        
+        if end_date_str:
+            try:
+                end_date = datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59, microsecond=999999)
+                # Timezone awareness, similar to start_date
+                end_date = end_date.replace(tzinfo=timezone.utc)
+                query = query.filter(DisasterReport.timestamp <= end_date)
+            except ValueError:
+                return jsonify(error="Invalid end_date format. Use YYYY-MM-DD."), 400
+
+        # Disaster Type Filter
+        if disaster_type and disaster_type.lower() != 'all':
+            query = query.filter(DisasterReport.disaster_type == disaster_type.lower())
+
+        # Minimum Severity Filter
+        if min_severity_str:
+            try:
+                min_severity = int(min_severity_str)
+                if 1 <= min_severity <= 5:
+                    query = query.filter(DisasterReport.severity >= min_severity)
+                else:
+                    # Optional: return error for invalid severity range, or just ignore
+                    pass # Ignoring invalid severity for now
+            except ValueError:
+                # Optional: return error for non-integer severity, or ignore
+                pass # Ignoring invalid severity for now
+        
+        # Year Filter (Example for later)
+        # if year_str and year_str.lower() != 'all':
+        #     try:
+        #         year = int(year_str)
+        #         query = query.filter(extract('year', DisasterReport.timestamp) == year)
+        #     except ValueError:
+        #         pass # Ignore invalid year
+
+        # --- 4. Order and Paginate ---
+        query = query.order_by(DisasterReport.timestamp.desc())
+        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+        
+        reports_data = [report.to_dict() for report in pagination.items]
+
+        # --- 5. Return JSON Response with Pagination Metadata ---
+        response_data = {
+            'reports': reports_data,
+            'total_items': pagination.total,
+            'total_pages': pagination.pages,
+            'current_page': pagination.page,
+            'per_page': pagination.per_page,
+            'has_next': pagination.has_next,
+            'has_prev': pagination.has_prev,
+            'next_page_num': pagination.next_num,
+            'prev_page_num': pagination.prev_num
+        }
+        current_app.api_logger.info(f"API Response: Status 200, {len(reports_data)} items (Page {pagination.page}/{pagination.pages}) for {request.path}")
+        return jsonify(response_data)
+
+    except Exception as e:
+        current_app.error_logger.error(f"Error in /api/history/reports: {e}", exc_info=True)
+        return jsonify(error="An internal error occurred", message=str(e)), 500
+
+@main_bp.route('/api/history/stats/by_type')
+# @login_required # Optional
+@limiter.limit("60 per minute")
+def get_history_stats_by_type():
+    current_app.api_logger.info(f"API Request: {request.method} {request.path} from {request.remote_addr} with args {request.args}")
+    try:
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+        # disaster_type filter is NOT applied here, as we want counts for ALL types
+        min_severity_str = request.args.get('min_severity')
+        # Add year/region filters here if they become available
+
+        query = DisasterReport.query.filter(DisasterReport.verified == True)
+
+        if start_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, '%Y-%m-%d').replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
+                query = query.filter(DisasterReport.timestamp >= start_date)
+            except ValueError:
+                return jsonify(error="Invalid start_date format. Use YYYY-MM-DD."), 400
+        
+        if end_date_str:
+            try:
+                end_date = datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=timezone.utc)
+                query = query.filter(DisasterReport.timestamp <= end_date)
+            except ValueError:
+                return jsonify(error="Invalid end_date format. Use YYYY-MM-DD."), 400
+
+        if min_severity_str:
+            try:
+                min_severity = int(min_severity_str)
+                if 1 <= min_severity <= 5:
+                    query = query.filter(DisasterReport.severity >= min_severity)
+            except ValueError:
+                pass # Ignore invalid severity
+
+        # Perform aggregation
+        # Group by disaster_type and count occurrences
+        results = query.with_entities(DisasterReport.disaster_type, func.count(DisasterReport.id))\
+                       .group_by(DisasterReport.disaster_type)\
+                       .order_by(func.count(DisasterReport.id).desc())\
+                       .all()
+        
+        labels = [row[0] for row in results]
+        data = [row[1] for row in results]
+
+        return jsonify({'labels': labels, 'data': data})
+
+    except Exception as e:
+        current_app.error_logger.error(f"Error in /api/history/stats/by_type: {e}", exc_info=True)
+        return jsonify(error="An internal error occurred", message=str(e)), 500
+
+@main_bp.route('/api/history/stats/by_month')
+# @login_required # Optional
+@limiter.limit("60 per minute")
+def get_history_stats_by_month():
+    current_app.api_logger.info(f"API Request: {request.method} {request.path} from {request.remote_addr} with args {request.args}")
+    try:
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+        disaster_type = request.args.get('type', 'all')
+        min_severity_str = request.args.get('min_severity')
+        target_year_str = request.args.get('year') # Specific year for monthly breakdown
+
+        query = DisasterReport.query.filter(DisasterReport.verified == True)
+
+        # Apply common filters
+        if start_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, '%Y-%m-%d').replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
+                query = query.filter(DisasterReport.timestamp >= start_date)
+            except ValueError: return jsonify(error="Invalid start_date"), 400
+        
+        if end_date_str:
+            try:
+                end_date = datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=timezone.utc)
+                query = query.filter(DisasterReport.timestamp <= end_date)
+            except ValueError: return jsonify(error="Invalid end_date"), 400
+
+        if disaster_type and disaster_type.lower() != 'all':
+            query = query.filter(DisasterReport.disaster_type == disaster_type.lower())
+
+        if min_severity_str:
+            try:
+                min_severity = int(min_severity_str)
+                if 1 <= min_severity <= 5: query = query.filter(DisasterReport.severity >= min_severity)
+            except ValueError: pass
+
+        if target_year_str and target_year_str.lower() != 'all':
+            try:
+                target_year = int(target_year_str)
+                query = query.filter(extract('year', DisasterReport.timestamp) == target_year)
+            except ValueError:
+                return jsonify(error="Invalid year format."), 400
+        # If no target_year, and no start/end date, this chart might not make sense or show all months ever.
+        # For now, it will use the date range if provided, or filter by target_year.
+        # If neither, it will group all data by month across all years.
+
+        # Perform aggregation
+        # Group by month and count occurrences
+        # extract('month', ...) gives 1 for Jan, 2 for Feb, etc.
+        results = query.with_entities(extract('month', DisasterReport.timestamp).label('month'), 
+                                      func.count(DisasterReport.id).label('count'))\
+                       .group_by('month')\
+                       .order_by('month')\
+                       .all()
+        
+        # Prepare data for Chart.js (ensure all 12 months are present, even if count is 0)
+        month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        monthly_data = [0] * 12 # Initialize with zeros
+        for row in results:
+            month_index = int(row.month) - 1 # SQLAlchemy extract might return float/Decimal
+            if 0 <= month_index < 12:
+                monthly_data[month_index] = row.count
+        
+        return jsonify({'labels': month_names, 'data': monthly_data})
+
+    except Exception as e:
+        current_app.error_logger.error(f"Error in /api/history/stats/by_month: {e}", exc_info=True)
+        return jsonify(error="An internal error occurred", message=str(e)), 500
+    
+@main_bp.route('/api/history/stats/by_severity')
+# @login_required # Optional
+@limiter.limit("60 per minute")
+def get_history_stats_by_severity():
+    current_app.api_logger.info(f"API Request: {request.method} {request.path} from {request.remote_addr} with args {request.args}")
+    try:
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+        disaster_type = request.args.get('type', 'all')
+        # min_severity filter is NOT applied here, as we want distribution across ALL severities
+        # Add year/region filters here if they become available
+
+        query = DisasterReport.query.filter(DisasterReport.verified == True)
+
+        # Apply common filters
+        if start_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, '%Y-%m-%d').replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
+                query = query.filter(DisasterReport.timestamp >= start_date)
+            except ValueError: return jsonify(error="Invalid start_date"), 400
+        
+        if end_date_str:
+            try:
+                end_date = datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=timezone.utc)
+                query = query.filter(DisasterReport.timestamp <= end_date)
+            except ValueError: return jsonify(error="Invalid end_date"), 400
+
+        if disaster_type and disaster_type.lower() != 'all':
+            query = query.filter(DisasterReport.disaster_type == disaster_type.lower())
+
+        # Perform aggregation
+        # Group by severity and count occurrences
+        results = query.with_entities(DisasterReport.severity, func.count(DisasterReport.id))\
+                       .group_by(DisasterReport.severity)\
+                       .order_by(DisasterReport.severity)\
+                       .all()
+        
+        # Prepare data for Chart.js (ensure all severities 1-5 are present)
+        severity_labels = [f"Severity {i}" for i in range(1, 6)]
+        severity_data = [0] * 5 # Initialize with zeros
+        for row in results:
+            severity_val = row[0]
+            count_val = row[1]
+            if severity_val is not None and 1 <= severity_val <= 5:
+                severity_data[severity_val - 1] = count_val
+            elif severity_val is None: # Handle cases where severity might be NULL
+                current_app.logger.warning("Found reports with NULL severity during aggregation for by_severity chart.")
+                # Decide how to handle these - ignore, or add to a 'Severity Unknown' category
+        
+        return jsonify({'labels': severity_labels, 'data': severity_data})
+
+    except Exception as e:
+        current_app.error_logger.error(f"Error in /api/history/stats/by_severity: {e}", exc_info=True)
+        return jsonify(error="An internal error occurred", message=str(e)), 500
 
 # --- Historical Data Viewer (Public) ---
 @main_bp.route('/history')

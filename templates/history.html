@@ -24,7 +24,7 @@
                 <button id="expand-filters" class="btn btn-sm btn-text"><i class="fas fa-chevron-down"></i> <span>Expand</span></button>
             </div>
             
-            <div class="filter-body">
+            <div class="filter-body"> {# This div's class 'expanded' will be toggled #}
                 <div class="filter-grid">
                     <div class="filter-group">
                         <label for="history-type">
@@ -51,6 +51,7 @@
                             <option value="2024">2024</option>
                             <option value="2023">2023</option>
                             <option value="2022">2022</option>
+                            {# Add more years or generate dynamically if needed #}
                         </select>
                     </div>
                     
@@ -58,7 +59,7 @@
                         <label for="history-region">
                             <i class="fas fa-globe-americas"></i> Region
                         </label>
-                        <select id="history-region" class="form-control">
+                        <select id="history-region" class="form-control" disabled> {# Disabled for now #}
                             <option value="all">Worldwide</option>
                             <option value="na">North America</option>
                             <option value="sa">South America</option>
@@ -280,30 +281,345 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/chart.js/3.9.1/chart.min.js"></script>
+<script src="{{ url_for('static', filename='js/vendor/chart.min.js') }}"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Initialize date pickers
-        flatpickr('.date-picker', {
-            dateFormat: 'Y-m-d',
-            maxDate: 'today'
-        });
-        
-        // Expand/collapse filter panel
-        document.getElementById('expand-filters').addEventListener('click', function() {
-            const filterBody = document.querySelector('.filter-body');
-            const expandBtn = document.getElementById('expand-filters');
-            const isExpanded = filterBody.classList.toggle('expanded');
+    // --- Chart instances (to update them later) ---
+    let typeChartInstance = null;
+    let monthChartInstance = null;
+    let severityChartInstance = null;
+    // let geoMapInstance = null; // For Leaflet later
+
+    // --- Helper function to get ALL filter values from UI ---
+    function getAllFilterValues() {
+        return {
+            type: document.getElementById('history-type').value,
+            year: document.getElementById('history-year').value,
+            // region: document.getElementById('history-region').value, // For later, backend needs to support it
+            min_severity: document.getElementById('history-severity').value,
+            start_date: document.getElementById('date-from').value,
+            end_date: document.getElementById('date-to').value
+        };
+    }
+
+    // --- UI Helper function to show loading state for a chart ---
+    function showChartLoading(chartContainerId) {
+        const container = document.getElementById(chartContainerId);
+        if (container) {
+            // Ensure canvas is removed if it exists, to show loading message properly
+            const existingCanvas = container.querySelector('canvas');
+            if (existingCanvas) existingCanvas.remove();
             
-            if (isExpanded) {
-                expandBtn.innerHTML = '<i class="fas fa-chevron-up"></i> <span>Collapse</span>';
-            } else {
-                expandBtn.innerHTML = '<i class="fas fa-chevron-down"></i> <span>Expand</span>';
+            container.innerHTML = `
+                <div class="chart-loading" style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%;">
+                    <div class="loading-spinner" style="border: 4px solid #f3f3f3; border-top: 4px solid var(--primary-color, #d32f2f); border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite;"></div>
+                    <p style="margin-top: 10px; color: var(--text-secondary);">Loading chart...</p>
+                </div>`;
+        }
+    }
+    // Keyframes for spinner (if not globally defined in CSS)
+    const styleSheet = document.createElement("style");
+    styleSheet.innerText = "@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }";
+    document.head.appendChild(styleSheet);
+
+
+    // --- UI Helper function to display error in chart container ---
+    function showChartError(chartContainerId, message) {
+        const container = document.getElementById(chartContainerId);
+        if (container) {
+            container.innerHTML = `<div class="chart-error" style="display: flex; justify-content: center; align-items: center; height: 100%; text-align:center; padding: 20px; color:var(--danger, #f44336);">Error: ${message}</div>`;
+        }
+    }
+    
+    // --- MODIFIED createTypeChart function ---
+    async function createTypeChart(filters) {
+        const chartContainerId = 'type-chart';
+        showChartLoading(chartContainerId);
+
+        const params = new URLSearchParams();
+        if (filters.start_date) params.append('start_date', filters.start_date);
+        if (filters.end_date) params.append('end_date', filters.end_date);
+        if (filters.min_severity && filters.min_severity !== '1') params.append('min_severity', filters.min_severity);
+        if (filters.year && filters.year !== 'all') params.append('year', filters.year); // Add year if relevant for this API
+
+        const apiUrl = `/api/history/stats/by_type?${params.toString()}`;
+        console.log(`Fetching for Type Chart: ${apiUrl}`);
+
+        try {
+            const response = await fetch(apiUrl);
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: `HTTP error ${response.status}`})); // Graceful catch if not JSON
+                throw new Error(errorData.message || `Failed to fetch data: ${response.statusText}`);
             }
+            const chartData = await response.json();
+
+            const container = document.getElementById(chartContainerId);
+            if (!container) { console.error(`Container ${chartContainerId} not found!`); return; }
+            container.innerHTML = ''; 
+            const canvas = document.createElement('canvas');
+            container.appendChild(canvas);
+
+            if (typeChartInstance) {
+                typeChartInstance.destroy(); 
+            }
+
+            if (!chartData.labels || !chartData.data || chartData.labels.length === 0) {
+                showChartError(chartContainerId, "No data available for selected filters.");
+                return;
+            }
+            
+            typeChartInstance = new Chart(canvas, {
+                type: 'pie',
+                data: {
+                    labels: chartData.labels,
+                    datasets: [{
+                        data: chartData.data,
+                        backgroundColor: [
+                            '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0',
+                            '#9966FF', '#FF9F40', '#757575', '#6D4C41' 
+                        ],
+                        borderWidth: 1,
+                        borderColor: getComputedStyle(document.documentElement).getPropertyValue('--bg-secondary').trim() || '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: { display: true, text: 'Disasters by Type', color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() },
+                        legend: { 
+                            position: 'right', 
+                            labels: { 
+                                padding: 15, 
+                                usePointStyle: true, 
+                                pointStyle: 'circle', 
+                                color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim()
+                            } 
+                        },
+                        tooltip: { 
+                            backgroundColor: 'rgba(0,0,0,0.8)', 
+                            padding: 12, 
+                            titleFont: { size: 14 }, 
+                            bodyFont: { size: 13 }, 
+                            displayColors: true 
+                        }
+                    }
+                }
+            });
+        } catch (error) {
+            console.error(`Error creating type chart: ${error}`);
+            showChartError(chartContainerId, error.message);
+        }
+    }
+
+    // --- MODIFIED createMonthChart function ---
+    async function createMonthChart(filters) {
+        const chartContainerId = 'month-chart';
+        showChartLoading(chartContainerId);
+
+        const params = new URLSearchParams();
+        if (filters.start_date) params.append('start_date', filters.start_date);
+        if (filters.end_date) params.append('end_date', filters.end_date);
+        if (filters.type && filters.type !== 'all') params.append('type', filters.type);
+        if (filters.min_severity && filters.min_severity !== '1') params.append('min_severity', filters.min_severity);
+        if (filters.year && filters.year !== 'all') params.append('year', filters.year);
+
+        const apiUrl = `/api/history/stats/by_month?${params.toString()}`;
+        console.log(`Fetching for Month Chart: ${apiUrl}`);
+        
+        try {
+            const response = await fetch(apiUrl);
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: `HTTP error ${response.status}`}));
+                throw new Error(errorData.message || `Failed to fetch data: ${response.statusText}`);
+            }
+            const chartData = await response.json();
+
+            const container = document.getElementById(chartContainerId);
+            if (!container) { console.error(`Container ${chartContainerId} not found!`); return; }
+            container.innerHTML = ''; 
+            const canvas = document.createElement('canvas');
+            container.appendChild(canvas);
+
+            if (monthChartInstance) monthChartInstance.destroy();
+
+            if (!chartData.labels || !chartData.data) { // Check if data is valid
+                showChartError(chartContainerId, "No data available for selected filters.");
+                return;
+            }
+
+            monthChartInstance = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: chartData.labels, 
+                    datasets: [{
+                        label: 'Number of Disasters',
+                        data: chartData.data, 
+                        backgroundColor: '#36A2EB',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        title: {display: true, text: 'Disasters by Month', color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim()}
+                    },
+                    scales: {
+                        y: { beginAtZero: true, ticks:{color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim()}, grid:{color: 'rgba(128,128,128,0.2)'} },
+                        x: { ticks:{color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim()}, grid:{display:false} }
+                    }
+                }
+            });
+        } catch (error) {
+            console.error(`Error creating month chart: ${error}`);
+            showChartError(chartContainerId, error.message);
+        }
+    }
+
+    // --- MODIFIED createSeverityChart function ---
+    async function createSeverityChart(filters) {
+        const chartContainerId = 'severity-chart';
+        showChartLoading(chartContainerId);
+
+        const params = new URLSearchParams();
+        if (filters.start_date) params.append('start_date', filters.start_date);
+        if (filters.end_date) params.append('end_date', filters.end_date);
+        if (filters.type && filters.type !== 'all') params.append('type', filters.type);
+        if (filters.year && filters.year !== 'all') params.append('year', filters.year);
+        // Note: min_severity from UI is not sent to this API, as it shows distribution
+
+        const apiUrl = `/api/history/stats/by_severity?${params.toString()}`;
+        console.log(`Fetching for Severity Chart: ${apiUrl}`);
+
+        try {
+            const response = await fetch(apiUrl);
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: `HTTP error ${response.status}`}));
+                throw new Error(errorData.message || `Failed to fetch data: ${response.statusText}`);
+            }
+            const chartData = await response.json();
+
+            const container = document.getElementById(chartContainerId);
+            if (!container) { console.error(`Container ${chartContainerId} not found!`); return; }
+            container.innerHTML = '';
+            const canvas = document.createElement('canvas');
+            container.appendChild(canvas);
+
+            if (severityChartInstance) severityChartInstance.destroy();
+            
+            if (!chartData.labels || !chartData.data) { // Check if data is valid
+                showChartError(chartContainerId, "No data available for selected filters.");
+                return;
+            }
+
+            severityChartInstance = new Chart(canvas, {
+                type: 'doughnut',
+                data: {
+                    labels: chartData.labels, 
+                    datasets: [{
+                        data: chartData.data, 
+                        backgroundColor: [ 
+                            '#66BB6A', '#FFEE58', '#FFA726', 
+                            '#EF5350', '#B71C1C'
+                        ],
+                        borderWidth: 1,
+                        borderColor: getComputedStyle(document.documentElement).getPropertyValue('--bg-secondary').trim() || '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '65%',
+                    plugins: {
+                        legend: { 
+                            position: 'bottom', 
+                            labels: { 
+                                padding: 15, 
+                                usePointStyle: true, 
+                                pointStyle: 'circle', 
+                                color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() 
+                            } 
+                        },
+                        title: {display: true, text: 'Severity Distribution', color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim()}
+                    }
+                }
+            });
+        } catch (error) {
+            console.error(`Error creating severity chart: ${error}`);
+            showChartError(chartContainerId, error.message);
+        }
+    }
+    
+    // --- Placeholder createGeoChart (Leaflet integration later) ---
+    function createGeoChart(filters) { 
+        const chartContainerId = 'geo-chart';
+        showChartLoading(chartContainerId);
+        // TODO: Fetch from /api/history/reports with filters, then use Leaflet
+        console.log("Geo chart to be implemented with Leaflet using filters:", filters);
+         setTimeout(() => { // Simulate
+            const container = document.getElementById(chartContainerId);
+            if(container) container.innerHTML = '<div style="text-align:center; padding: 20px; color: var(--text-secondary);">Geo Map (Leaflet) will be here.</div>';
+        }, 500);
+    }
+
+    // --- Function to apply all filters and update charts ---
+    function applyAllFiltersAndUpdateCharts() {
+        const currentFilters = getAllFilterValues(); 
+        console.log("Applying filters with values:", currentFilters);
+        
+        // Pass the currentFilters object to each chart function
+        createTypeChart(currentFilters);
+        createMonthChart(currentFilters);
+        createSeverityChart(currentFilters);
+        createGeoChart(currentFilters); // For now, just passes filters for console logging
+    }
+
+    // --- DOMContentLoaded ---
+    document.addEventListener('DOMContentLoaded', function() {
+        flatpickr('.date-picker', { 
+            dateFormat: 'Y-m-d', 
+            maxDate: 'today',
+            static:true
         });
         
-        // Format selector buttons
+        applyAllFiltersAndUpdateCharts(); // Initial load
+
+        document.getElementById('apply-history-filters').addEventListener('click', applyAllFiltersAndUpdateCharts);
+        
+        document.getElementById('reset-history-filters').addEventListener('click', function() {
+            document.getElementById('history-type').value = 'all';
+            document.getElementById('history-year').value = 'all';
+            document.getElementById('history-severity').value = '1'; 
+            // Safely clear flatpickr instances
+            const dateFromPicker = document.getElementById('date-from')._flatpickr;
+            if (dateFromPicker) dateFromPicker.clear();
+            const dateToPicker = document.getElementById('date-to')._flatpickr;
+            if (dateToPicker) dateToPicker.clear();
+            // document.getElementById('history-region').value = 'all'; // If/when region filter is active
+            
+            applyAllFiltersAndUpdateCharts();
+        });
+
+        const expandFiltersBtn = document.getElementById('expand-filters');
+        if (expandFiltersBtn) {
+            const filterBody = document.querySelector('.filter-body'); // Should be sibling or child of .filter-panel
+            if (filterBody) {
+                expandFiltersBtn.addEventListener('click', function() {
+                    const isExpanded = filterBody.classList.toggle('expanded'); // Assuming 'expanded' class controls visibility
+                    this.innerHTML = isExpanded ? '<i class="fas fa-chevron-up"></i> <span>Collapse</span>' : '<i class="fas fa-chevron-down"></i> <span>Expand</span>';
+                });
+                 // Initial state of button text based on class (if filterBody starts expanded)
+                if (filterBody.classList.contains('expanded')) {
+                    expandFiltersBtn.innerHTML = '<i class="fas fa-chevron-up"></i> <span>Collapse</span>';
+                }
+            } else {
+                console.warn("Filter body for expand/collapse not found.");
+            }
+        }
+        
+        // Format selector buttons for download
         document.querySelectorAll('.format-button').forEach(btn => {
             btn.addEventListener('click', function() {
                 document.querySelectorAll('.format-button').forEach(b => b.classList.remove('active'));
@@ -311,234 +627,53 @@
             });
         });
         
-        // Create charts
-        setTimeout(function() {
-            createTypeChart();
-            createMonthChart();
-            createSeverityChart();
-            createGeoChart();
-        }, 800);
-        
         // Handle download button click
         document.getElementById('start-download').addEventListener('click', function() {
             const selectedFormat = document.querySelector('.format-button.active').dataset.format;
-            alert(`Downloading data in ${selectedFormat.toUpperCase()} format. In a real implementation, this would start the download.`);
+            // TODO: Implement actual download by constructing URL with filters
+            // Example: const filters = getAllFilterValues();
+            // const params = new URLSearchParams(); // build params from filters
+            // params.append('format', selectedFormat);
+            // window.location.href = `/download/history_reports?${params.toString()}`;
+            alert(`Download for ${selectedFormat.toUpperCase()} would be initiated here with current filters.`);
         });
         
-        // Handle chart controls
+        // Handle chart controls (fullscreen, info, download chart image)
         document.querySelectorAll('.chart-fullscreen').forEach(btn => {
             btn.addEventListener('click', function() {
                 const chartCard = this.closest('.chart-card');
-                chartCard.classList.toggle('fullscreen');
-                
-                if (chartCard.classList.contains('fullscreen')) {
-                    this.innerHTML = '<i class="fas fa-compress"></i>';
-                    this.title = 'Exit fullscreen';
-                } else {
-                    this.innerHTML = '<i class="fas fa-expand"></i>';
-                    this.title = 'Fullscreen';
+                if (chartCard) {
+                    chartCard.classList.toggle('fullscreen-active'); // Use a specific class for fullscreen
+                    // Update icon based on fullscreen state
+                    this.innerHTML = chartCard.classList.contains('fullscreen-active') ? 
+                                     '<i class="fas fa-compress"></i>' : 
+                                     '<i class="fas fa-expand"></i>';
+                    this.title = chartCard.classList.contains('fullscreen-active') ? 
+                                 'Exit Fullscreen' : 
+                                 'Fullscreen';
+                    // You might need to trigger chart.resize() if using Chart.js responsive options
+                    // Or handle CSS for .fullscreen-active to make it appear fullscreen
                 }
             });
         });
         
         document.querySelectorAll('.chart-info').forEach(btn => {
             btn.addEventListener('click', function() {
-                const chartTitle = this.closest('.chart-header').querySelector('h3').textContent;
-                alert(`Info about "${chartTitle}" chart would be shown here.`);
+                const chartHeader = this.closest('.chart-header');
+                const chartTitle = chartHeader ? chartHeader.querySelector('h3').textContent : 'Chart';
+                alert(`Information about the "${chartTitle}" would be displayed here.`);
             });
         });
         
         document.querySelectorAll('.chart-download').forEach(btn => {
             btn.addEventListener('click', function() {
-                const chartTitle = this.closest('.chart-header').querySelector('h3').textContent;
-                alert(`Download options for "${chartTitle}" would be shown here.`);
+                 const chartHeader = this.closest('.chart-header');
+                 const chartTitle = chartHeader ? chartHeader.querySelector('h3').textContent : 'Chart';
+                // This would typically trigger a download of the chart image or data
+                alert(`Options to download image/data for "${chartTitle}" would be here.`);
             });
         });
-        
-        // Filter actions
-        document.getElementById('apply-history-filters').addEventListener('click', function() {
-            alert('Filters applied! Charts would update in the real application.');
-            // Simulate chart reload
-            document.querySelectorAll('.chart-container').forEach(container => {
-                container.innerHTML = '<div class="chart-loading"><div class="loading-spinner"></div><p>Loading chart...</p></div>';
-            });
-            
-            setTimeout(function() {
-                createTypeChart();
-                createMonthChart();
-                createSeverityChart();
-                createGeoChart();
-            }, 800);
-        });
-        
-        document.getElementById('reset-history-filters').addEventListener('click', function() {
-            // Reset all filters to defaults
-            document.getElementById('history-type').value = 'all';
-            document.getElementById('history-year').value = 'all';
-            document.getElementById('history-region').value = 'all';
-            document.getElementById('history-severity').value = '1';
-            document.getElementById('date-from').value = '';
-            document.getElementById('date-to').value = '';
-            
-            alert('Filters have been reset.');
-        });
+
     });
-    
-    function createTypeChart() {
-        const container = document.getElementById('type-chart');
-        container.innerHTML = '';
-        
-        const canvas = document.createElement('canvas');
-        container.appendChild(canvas);
-        
-        new Chart(canvas, {
-            type: 'pie',
-            data: {
-                labels: ['Earthquakes', 'Floods', 'Wildfires', 'Storms', 'Landslides', 'Other'],
-                datasets: [{
-                    data: [25, 18, 15, 22, 7, 5],
-                    backgroundColor: [
-                        '#FF6384',
-                        '#36A2EB',
-                        '#FFCE56',
-                        '#4BC0C0',
-                        '#9966FF',
-                        '#C9CBCF'
-                    ],
-                    borderWidth: 1,
-                    borderColor: '#ffffff'
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'right',
-                        labels: {
-                            padding: 15,
-                            usePointStyle: true,
-                            pointStyle: 'circle'
-                        }
-                    },
-                    tooltip: {
-                        backgroundColor: 'rgba(0,0,0,0.8)',
-                        padding: 12,
-                        titleFont: {
-                            size: 14
-                        },
-                        bodyFont: {
-                            size: 13
-                        },
-                        displayColors: true
-                    }
-                }
-            }
-        });
-    }
-    
-    function createMonthChart() {
-        const container = document.getElementById('month-chart');
-        container.innerHTML = '';
-        
-        const canvas = document.createElement('canvas');
-        container.appendChild(canvas);
-        
-        new Chart(canvas, {
-            type: 'bar',
-            data: {
-                labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-                datasets: [{
-                    label: 'Number of Disasters',
-                    data: [5, 7, 9, 12, 15, 18, 22, 25, 18, 12, 8, 6],
-                    backgroundColor: '#36A2EB',
-                    borderRadius: 4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        grid: {
-                            color: 'rgba(0, 0, 0, 0.05)'
-                        }
-                    },
-                    x: {
-                        grid: {
-                            display: false
-                        }
-                    }
-                },
-                plugins: {
-                    legend: {
-                        display: false
-                    }
-                }
-            }
-        });
-    }
-    
-    function createSeverityChart() {
-        const container = document.getElementById('severity-chart');
-        container.innerHTML = '';
-        
-        const canvas = document.createElement('canvas');
-        container.appendChild(canvas);
-        
-        new Chart(canvas, {
-            type: 'doughnut',
-            data: {
-                labels: ['Level 1', 'Level 2', 'Level 3', 'Level 4', 'Level 5'],
-                datasets: [{
-                    data: [30, 25, 20, 15, 10],
-                    backgroundColor: [
-                        '#C5E8B7',
-                        '#ABE098',
-                        '#83CE87',
-                        '#57BB59',
-                        '#009900'
-                    ],
-                    borderWidth: 1,
-                    borderColor: '#ffffff'
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                cutout: '65%',
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: {
-                            padding: 15,
-                            usePointStyle: true,
-                            pointStyle: 'circle'
-                        }
-                    }
-                }
-            }
-        });
-    }
-    
-    function createGeoChart() {
-        const container = document.getElementById('geo-chart');
-        container.innerHTML = '';
-        
-        // In a real application, this would be a proper map visualization
-        // Here we'll just create a placeholder with some styling
-        const mapPlaceholder = document.createElement('div');
-        mapPlaceholder.className = 'map-placeholder';
-        
-        mapPlaceholder.innerHTML = `
-            <div class="map-overlay">
-                <i class="fas fa-map-marked-alt"></i>
-                <p>In a real implementation, this would display a detailed heatmap showing disaster frequency by geographic location.</p>
-            </div>
-        `;
-        
-        container.appendChild(mapPlaceholder);
-    }
 </script>
 {% endblock %}
