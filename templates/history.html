@@ -2,8 +2,23 @@
 
 {% block title %}DisasterTrack - Historical Data Analysis{% endblock %}
 
-{% block extra_head %}
+{% block styles %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
+{# Leaflet CSS #}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<style>
+    /* ... your existing styles from previous step ... */
+    .chart-container.map-chart { /* Ensure map chart container has explicit height */
+         min-height: 400px; /* Or a fixed height like 400px */
+         height: 400px; /* Explicit height for Leaflet */
+    }
+    #history-leaflet-map {
+        height: 100%; /* Takes height from parent .map-chart */
+        width: 100%;
+    }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -249,20 +264,13 @@
             
             <div class="download-options">
                 <div class="format-selector">
-                    <label>Select Format</label>
-                    <div class="format-buttons">
-                        <button id="download-csv" class="format-button active" data-format="csv">
-                            <i class="fas fa-file-csv"></i>
-                            <span>CSV</span>
-                        </button>
-                        <button id="download-json" class="format-button" data-format="json">
-                            <i class="fas fa-file-code"></i>
-                            <span>JSON</span>
-                        </button>
-                        <button id="download-xlsx" class="format-button" data-format="xlsx">
-                            <i class="fas fa-file-excel"></i>
-                            <span>Excel</span>
-                        </button>
+                    <div class="format-select-wrapper" style="display: flex; align-items: center; gap: 10px;">
+                        <label for="download-format-select" style="margin-bottom: 0;">Select Format:</label>
+                        <select id="download-format-select" class="form-control" style="width: auto; padding: 0.375rem 0.75rem;">
+                            <option value="csv" selected>CSV</option>
+                            <option value="json">JSON</option>
+                            <option value="xlsx">Excel (Not Implemented)</option> {# Mark as not implemented for now #}
+                        </select>
                     </div>
                 </div>
                 
@@ -283,12 +291,16 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/vendor/chart.min.js') }}"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
+{# Leaflet JS #}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script>
     // --- Chart instances (to update them later) ---
     let typeChartInstance = null;
     let monthChartInstance = null;
     let severityChartInstance = null;
-    // let geoMapInstance = null; // For Leaflet later
+    let geoMapInstance = null; // For Leaflet map
+    let geoMarkerLayer = null; // For Leaflet markers
 
     // --- Helper function to get ALL filter values from UI ---
     function getAllFilterValues() {
@@ -552,17 +564,112 @@
         }
     }
     
-    // --- Placeholder createGeoChart (Leaflet integration later) ---
-    function createGeoChart(filters) { 
-        const chartContainerId = 'geo-chart';
-        showChartLoading(chartContainerId);
-        // TODO: Fetch from /api/history/reports with filters, then use Leaflet
-        console.log("Geo chart to be implemented with Leaflet using filters:", filters);
-         setTimeout(() => { // Simulate
-            const container = document.getElementById(chartContainerId);
-            if(container) container.innerHTML = '<div style="text-align:center; padding: 20px; color: var(--text-secondary);">Geo Map (Leaflet) will be here.</div>';
-        }, 500);
+    async function createGeoChart(filters) {
+    const chartContainerId = 'geo-chart';
+    const mapDivId = 'history-leaflet-map'; // Use a unique ID for the map div if #geo-chart is just a wrapper
+    showChartLoading(chartContainerId); // This will show loading in the #geo-chart div
+
+    // Prepare parameters for /api/history/reports
+    // For map, we might want a decent number of points, but not necessarily all if dataset is huge.
+    // Let's fetch the first page with a reasonable per_page, e.g., 100.
+    const params = new URLSearchParams();
+    if (filters.start_date) params.append('start_date', filters.start_date);
+    if (filters.end_date) params.append('end_date', filters.end_date);
+    if (filters.type && filters.type !== 'all') params.append('type', filters.type);
+    if (filters.year && filters.year !== 'all') params.append('year', filters.year);
+    if (filters.min_severity && filters.min_severity !== '1') params.append('min_severity', filters.min_severity);
+    params.append('page', '1');
+    params.append('per_page', '200'); // Fetch up to 200 points for the map display
+
+    const apiUrl = `/api/history/reports?${params.toString()}`;
+    console.log(`Fetching for Geo Chart: ${apiUrl}`);
+
+    try {
+        const response = await fetch(apiUrl);
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: `HTTP error ${response.status}` }));
+            throw new Error(errorData.message || `Failed to fetch geo data: ${response.statusText}`);
+        }
+        const apiResponseData = await response.json();
+        const reports = apiResponseData.reports; // Get the array of reports
+
+        const container = document.getElementById(chartContainerId);
+        if (!container) { console.error(`Container ${chartContainerId} not found!`); return; }
+        
+
+        // Clear previous content (loading message) and add a map div
+        container.innerHTML = `<div id="${mapDivId}" style="height: 100%; width: 100%;"></div>`;
+        const mapElement = document.getElementById(mapDivId);
+
+        if (!mapElement) {
+            showChartError(chartContainerId, "Map element could not be created.");
+            return;
+        }
+        
+        // Initialize or update map
+        if (!geoMapInstance) {
+            geoMapInstance = L.map(mapDivId, {
+                worldCopyJump: true, // Enable map wrapping
+                maxBounds: [ [-85.05112878, -360.0], [85.05112878, 360.0] ], // Allow full horizontal pan
+            }).setView([20, 0], 2); // Default view
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                minZoom: 2,
+                maxZoom: 18
+            }).addTo(geoMapInstance);
+            
+            geoMarkerLayer = L.markerClusterGroup().addTo(geoMapInstance);
+        } else {
+            geoMarkerLayer.clearLayers(); // Clear existing markers
+        }
+        
+        if (!reports || reports.length === 0) {
+            // Optionally show a "No data to display on map" message inside the map div
+            // For now, an empty map is fine if other charts show "no data"
+            console.log("No reports to display on geo chart for current filters.");
+            // You could add a placeholder message to the map div here if desired.
+            // e.g., mapElement.innerHTML = "<p style='text-align:center; padding-top:50px;'>No locations to display.</p>";
+            // But be careful, as this removes the map instance. Better to use a Leaflet control for messages.
+            return;
+        }
+
+        reports.forEach(report => {
+            if (report.lat != null && report.lng != null) {
+                const marker = L.marker([report.lat, report.lng]);
+                marker.bindPopup(`<b>${report.title || report.type}</b><br>Severity: ${report.severity || 'N/A'}<br>${new Date(report.timestamp).toLocaleDateString()}`);
+                geoMarkerLayer.addLayer(marker);
+            }
+        });
+
+        // Attempt to fit bounds if there are markers, otherwise keep default view
+        if (reports.length > 0 && geoMarkerLayer.getLayers().length > 0) {
+             // A small delay can sometimes help if the map div was just created/resized
+            setTimeout(() => {
+                 try {
+                    geoMapInstance.fitBounds(geoMarkerLayer.getBounds(), { padding: [30, 30] });
+                 } catch(e) {
+                    console.warn("Could not fit map bounds, possibly no valid markers:", e);
+                    geoMapInstance.setView([20, 0], 2); // Reset to default view
+                 }
+            }, 100);
+        } else if (geoMapInstance.getZoom() > 3 && reports.length === 0) { // Reset zoom if no data
+            geoMapInstance.setView([20, 0], 2);
+        }
+
+
+    } catch (error) {
+        console.error(`Error creating geo chart: ${error}`);
+        showChartError(chartContainerId, error.message);
+        // If map was initialized, clear it or show error on map
+        if (geoMapInstance && document.getElementById(mapDivId)) {
+            // geoMapInstance.remove(); // This might be too aggressive
+            // geoMapInstance = null;
+             const mapDiv = document.getElementById(mapDivId);
+             if (mapDiv) mapDiv.innerHTML = `<p style='text-align:center; color:red; padding-top:50px;'>Error loading map data: ${error.message}</p>`;
+        }
     }
+}
 
     // --- Function to apply all filters and update charts ---
     function applyAllFiltersAndUpdateCharts() {
@@ -629,13 +736,24 @@
         
         // Handle download button click
         document.getElementById('start-download').addEventListener('click', function() {
-            const selectedFormat = document.querySelector('.format-button.active').dataset.format;
-            // TODO: Implement actual download by constructing URL with filters
-            // Example: const filters = getAllFilterValues();
-            // const params = new URLSearchParams(); // build params from filters
-            // params.append('format', selectedFormat);
-            // window.location.href = `/download/history_reports?${params.toString()}`;
-            alert(`Download for ${selectedFormat.toUpperCase()} would be initiated here with current filters.`);
+            // Get selected format from the dropdown
+            const selectedFormat = document.getElementById('download-format-select').value;
+            
+            const currentFilters = getAllFilterValues(); 
+
+            const params = new URLSearchParams();
+            if (currentFilters.start_date) params.append('start_date', currentFilters.start_date);
+            if (currentFilters.end_date) params.append('end_date', currentFilters.end_date);
+            if (currentFilters.type && currentFilters.type !== 'all') params.append('type', currentFilters.type);
+            if (currentFilters.year && currentFilters.year !== 'all') params.append('year', currentFilters.year);
+            if (currentFilters.min_severity && currentFilters.min_severity !== '1') params.append('min_severity', currentFilters.min_severity);
+            
+            params.append('format', selectedFormat);
+
+            const downloadUrl = `/download/history?${params.toString()}`;
+            console.log("Initiating download from:", downloadUrl);
+            
+            window.location.href = downloadUrl; 
         });
         
         // Handle chart controls (fullscreen, info, download chart image)

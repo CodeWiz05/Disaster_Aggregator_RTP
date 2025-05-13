@@ -28,4 +28,4 @@ if __name__ == '__main__':
 
     app.logger.info(f"Starting Disaster Aggregator on {host}:{port} in {env} mode (Debug: {use_debug})")
     # Use Flask's built-in server, disable reloader if debug is False for stability
-    app.run(host=host, port=port, debug=use_debug, use_reloader=use_debug)
+    app.run(host=host, port=port, debug=use_debug, use_reloader=False)

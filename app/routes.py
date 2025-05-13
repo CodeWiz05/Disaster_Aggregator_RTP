@@ -12,7 +12,73 @@ from sqlalchemy import func, select, desc, extract
 from sqlalchemy.orm import aliased
 from datetime import datetime, timezone
 import logging
+import csv
+import io
+from flask import Response
+
 # -------------------------------------------------------
+
+def _get_filtered_historical_reports_query(filters):
+    """
+    Builds a SQLAlchemy query for DisasterReport based on filter criteria.
+    `filters` is a dictionary-like object (e.g., request.args).
+    Returns the query object, not executed.
+    """
+    query = DisasterReport.query.filter(DisasterReport.verified == True)
+
+    start_date_str = filters.get('start_date')
+    end_date_str = filters.get('end_date')
+    disaster_type = filters.get('type', 'all')
+    min_severity_str = filters.get('min_severity')
+    year_str = filters.get('year')
+
+    # Date Range Filter
+    if start_date_str:
+        try:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').replace(
+                hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc
+            )
+            query = query.filter(DisasterReport.timestamp >= start_date)
+        except ValueError:
+            # Let the calling route handle error response if critical, or log & ignore
+            current_app.logger.warning(f"Invalid start_date format received: {start_date_str}")
+            raise ValueError("Invalid start_date format. Use YYYY-MM-DD.") # Or return None/modified query
+    
+    if end_date_str:
+        try:
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').replace(
+                hour=23, minute=59, second=59, microsecond=999999, tzinfo=timezone.utc
+            )
+            query = query.filter(DisasterReport.timestamp <= end_date)
+        except ValueError:
+            current_app.logger.warning(f"Invalid end_date format received: {end_date_str}")
+            raise ValueError("Invalid end_date format. Use YYYY-MM-DD.")
+
+    # Disaster Type Filter
+    if disaster_type and disaster_type.lower() != 'all':
+        query = query.filter(DisasterReport.disaster_type == disaster_type.lower())
+
+    # Minimum Severity Filter
+    if min_severity_str:
+        try:
+            min_severity = int(min_severity_str)
+            if 1 <= min_severity <= 5:
+                query = query.filter(DisasterReport.severity >= min_severity)
+        except ValueError:
+            current_app.logger.warning(f"Invalid min_severity value received: {min_severity_str}")
+            # Optionally raise error or ignore
+
+    # Year Filter
+    if year_str and year_str.lower() != 'all':
+        try:
+            year = int(year_str)
+            query = query.filter(extract('year', DisasterReport.timestamp) == year)
+        except ValueError:
+            current_app.logger.warning(f"Invalid year value received: {year_str}")
+            # Optionally raise error or ignore
+            
+    return query
+
 
 # Keep main_bp definition
 main_bp = Blueprint('main', __name__)
@@ -314,7 +380,7 @@ def get_historical_reports():
     current_app.api_logger.info(f"API Request: {request.method} {request.path} from {request.remote_addr} with args {request.args}")
 
     try:
-        # --- 1. Get and Validate Query Parameters ---
+        # --- 1. Get Pagination Parameters ---
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 25, type=int)
         if per_page > 100: # Max per_page limit
@@ -322,74 +388,22 @@ def get_historical_reports():
         if page < 1:
             page = 1
 
-        start_date_str = request.args.get('start_date')
-        end_date_str = request.args.get('end_date')
-        disaster_type = request.args.get('type', 'all')
-        min_severity_str = request.args.get('min_severity')
-        # year_str = request.args.get('year') # For later
-
-        # --- 2. Build Base Query ---
-        # We want reports that are considered public/finalized
-        # Using verified=True is a good start.
-        # Or specific statuses: query = DisasterReport.query.filter(DisasterReport.status.in_(['verified_agg', 'api_verified']))
-        query = DisasterReport.query.filter(DisasterReport.verified == True)
-
-
-        # --- 3. Apply Filters ---
-        # Date Range Filter
-        if start_date_str:
-            try:
-                start_date = datetime.strptime(start_date_str, '%Y-%m-%d').replace(hour=0, minute=0, second=0, microsecond=0)
-                # Ensure timezone awareness if comparing with timezone-aware DB timestamps
-                # If your DB stores naive UTC, make start_date naive UTC too.
-                # If DB stores aware UTC, make start_date aware UTC.
-                # Assuming DB timestamp is aware UTC (from DateTime(timezone=True)):
-                start_date = start_date.replace(tzinfo=timezone.utc)
-                query = query.filter(DisasterReport.timestamp >= start_date)
-            except ValueError:
-                return jsonify(error="Invalid start_date format. Use YYYY-MM-DD."), 400
-        
-        if end_date_str:
-            try:
-                end_date = datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59, microsecond=999999)
-                # Timezone awareness, similar to start_date
-                end_date = end_date.replace(tzinfo=timezone.utc)
-                query = query.filter(DisasterReport.timestamp <= end_date)
-            except ValueError:
-                return jsonify(error="Invalid end_date format. Use YYYY-MM-DD."), 400
-
-        # Disaster Type Filter
-        if disaster_type and disaster_type.lower() != 'all':
-            query = query.filter(DisasterReport.disaster_type == disaster_type.lower())
-
-        # Minimum Severity Filter
-        if min_severity_str:
-            try:
-                min_severity = int(min_severity_str)
-                if 1 <= min_severity <= 5:
-                    query = query.filter(DisasterReport.severity >= min_severity)
-                else:
-                    # Optional: return error for invalid severity range, or just ignore
-                    pass # Ignoring invalid severity for now
-            except ValueError:
-                # Optional: return error for non-integer severity, or ignore
-                pass # Ignoring invalid severity for now
-        
-        # Year Filter (Example for later)
-        # if year_str and year_str.lower() != 'all':
-        #     try:
-        #         year = int(year_str)
-        #         query = query.filter(extract('year', DisasterReport.timestamp) == year)
-        #     except ValueError:
-        #         pass # Ignore invalid year
-
-        # --- 4. Order and Paginate ---
+        # --- 2. Use the helper function to get the base filtered query ---
+        # The helper function will handle parsing start_date, end_date, type, min_severity, year
+        # from request.args and apply the filters.
+        try:
+            query = _get_filtered_historical_reports_query(request.args)
+        except ValueError as ve: # Catch validation errors from the helper (e.g., bad date format)
+            return jsonify(error=str(ve)), 400
+            
+        # --- 3. Order and Paginate ---
         query = query.order_by(DisasterReport.timestamp.desc())
-        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+        # The paginate method executes the query for the current page
+        pagination = query.paginate(page=page, per_page=per_page, error_out=False) 
         
         reports_data = [report.to_dict() for report in pagination.items]
 
-        # --- 5. Return JSON Response with Pagination Metadata ---
+        # --- 4. Return JSON Response with Pagination Metadata ---
         response_data = {
             'reports': reports_data,
             'total_items': pagination.total,
@@ -398,8 +412,8 @@ def get_historical_reports():
             'per_page': pagination.per_page,
             'has_next': pagination.has_next,
             'has_prev': pagination.has_prev,
-            'next_page_num': pagination.next_num,
-            'prev_page_num': pagination.prev_num
+            'next_page_num': pagination.next_num if pagination.has_next else None, # Corrected
+            'prev_page_num': pagination.prev_num if pagination.has_prev else None  # Corrected
         }
         current_app.api_logger.info(f"API Response: Status 200, {len(reports_data)} items (Page {pagination.page}/{pagination.pages}) for {request.path}")
         return jsonify(response_data)
@@ -407,6 +421,7 @@ def get_historical_reports():
     except Exception as e:
         current_app.error_logger.error(f"Error in /api/history/reports: {e}", exc_info=True)
         return jsonify(error="An internal error occurred", message=str(e)), 500
+    
 
 @main_bp.route('/api/history/stats/by_type')
 # @login_required # Optional
@@ -601,6 +616,83 @@ def history():
          flash('Error loading historical data.', 'danger')
          return redirect(url_for('main.index'))
 
+@main_bp.route('/download/history')
+# @login_required # Optional
+@limiter.limit("10 per hour") # Download can be resource-intensive
+def download_historical_data():
+    current_app.api_logger.info(f"Download Request: {request.method} {request.path} from {request.remote_addr} with args {request.args}")
+    try:
+        # Get filters from request.args
+        # Use the helper function to get the base filtered query
+        try:
+            query = _get_filtered_historical_reports_query(request.args)
+        except ValueError as ve:
+            # For download, flash message and redirect or simple error page might be better than JSON
+            flash(str(ve), 'danger')
+            return redirect(url_for('main.history')) # Or render an error template
+
+        # Fetch all matching reports (no pagination for download)
+        reports = query.order_by(DisasterReport.timestamp.desc()).all()
+
+        if not reports:
+            flash("No data found for the selected filters to download.", "info")
+            return redirect(url_for('main.history'))
+
+        output_format = request.args.get('format', 'csv').lower()
+        
+        # Prepare filename with timestamp
+        timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"disaster_history_{timestamp_str}.{output_format}"
+
+        if output_format == 'csv':
+            # Use io.StringIO to build CSV in memory
+            si = io.StringIO()
+            cw = csv.writer(si)
+
+            # Write header - get keys from the first report's to_dict()
+            # Ensure consistent order and select desired fields
+            if reports:
+                sample_dict = reports[0].to_dict()
+                # Define desired CSV columns and their order
+                fieldnames = ['id', 'title', 'disaster_type', 'timestamp', 'latitude', 'longitude', 
+                              'severity', 'source', 'description', 'status', 
+                              'magnitude', 'depth_km', 'user_id', 'disaster_event_id']
+                # Filter out keys not in sample_dict to avoid errors if to_dict changes
+                actual_fieldnames = [f for f in fieldnames if f in sample_dict]
+                cw.writerow(actual_fieldnames) # Header row
+
+                for report in reports:
+                    report_dict = report.to_dict()
+                    cw.writerow([report_dict.get(field) for field in actual_fieldnames])
+            
+            output = si.getvalue()
+            return Response(
+                output,
+                mimetype="text/csv",
+                headers={"Content-Disposition": f"attachment;filename={filename}"}
+            )
+
+        elif output_format == 'json':
+            reports_data = [report.to_dict() for report in reports]
+            # For JSON download, we still want to trigger a file save dialog
+            json_output = jsonify(reports_data).get_data(as_text=True)
+            return Response(
+                json_output,
+                mimetype="application/json",
+                headers={"Content-Disposition": f"attachment;filename={filename}"}
+            )
+        
+        # Add 'excel' format later if needed using pandas/openpyxl
+
+        else:
+            flash("Invalid download format specified.", "warning")
+            return redirect(url_for('main.history'))
+
+    except Exception as e:
+        current_app.error_logger.error(f"Error in /download/history: {e}", exc_info=True)
+        flash("An error occurred while preparing your download. Please try again.", "danger")
+        return redirect(url_for('main.history'))
+    
 
 # --- Login Route ---
 @main_bp.route('/login', methods=['GET', 'POST'])
