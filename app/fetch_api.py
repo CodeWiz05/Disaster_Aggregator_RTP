@@ -12,7 +12,7 @@ from flask import current_app # For accessing app-bound loggers
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import select
 from shapely.geometry import shape
-import logging
+from .utils import find_or_create_disaster_event
 
 
 # --- Async Fetcher for USGS Earthquakes ---
@@ -523,12 +523,41 @@ async def run_fetchers_async():
         return
 
     current_app.fetch_logger.info(f"Total valid reports prepared for DB: {len(all_new_reports)}. Attempting commit...")
+    linked_disaster_events = [] # To keep track for logging
     try:
         db.session.add_all(all_new_reports)
         db.session.commit()
         total_added_count = len(all_new_reports)
         current_app.fetch_logger.info(f"Successfully committed {total_added_count} new reports.")
         successful_commit = True
+        # --- NEW: Aggregate newly added API-verified reports ---
+        if total_added_count > 0:
+            current_app.fetch_logger.info(f"Aggregating {total_added_count} newly fetched reports into Disaster events...")
+            aggregated_count = 0
+            newly_created_disaster_events = 0
+            for report_obj in all_new_reports: # Iterate over the Python objects we just added
+                if report_obj.status == 'api_verified' and report_obj.id is not None: # Ensure it has an ID
+                    # The report_obj is already in the session from the add_all and commit
+                    # find_or_create_disaster_event will add/update Disaster and link report_obj
+                    # It expects the report to be verified, which api_verified reports are.
+                    disaster_event = find_or_create_disaster_event(report_obj)
+                    if disaster_event:
+                        aggregated_count += 1
+                        if disaster_event not in linked_disaster_events: # Track unique disaster events affected
+                            linked_disaster_events.append(disaster_event)
+                            if disaster_event.id is None: # Check if it's a newly created one (before commit flushes)
+                                # This check might be tricky before the final commit of disaster events
+                                # A better way is to check if it was new inside find_or_create
+                                pass 
+                    else:
+                        current_app.fetch_logger.warning(f"Failed to aggregate report ID {report_obj.id} into a Disaster event.")
+            
+            if linked_disaster_events: # If any Disaster events were created/updated
+                db.session.commit() # Commit changes to Disaster events and DisasterReport.disaster_id links
+                current_app.fetch_logger.info(f"Successfully aggregated {aggregated_count} reports. Affected/created {len(linked_disaster_events)} Disaster events.")
+            else:
+                current_app.fetch_logger.info("No new disaster events created or updated from this batch of reports.")
+        # --- END NEW AGGREGATION ---
     except SQLAlchemyError as db_err:
         current_app.fetch_logger.error(f"!!! Database Commit Failed: {db_err} !!!", exc_info=True)
         current_app.error_logger.error(f"Run_Fetchers: Database Commit Failed (SQLAlchemyError)", exc_info=True) # Critical

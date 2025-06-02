@@ -151,9 +151,9 @@ cython_debug/
 Thumbs.db
 
 # Specific project files
-database.db # Ignore the SQLite dev database
-logs/ # Ignore log directory
-*.log # Ignore any log files
+database.db  
+logs/ 
+*.log
 
 # Instance folder (often contains secrets or DB)
 instance/

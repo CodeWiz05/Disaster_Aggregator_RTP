@@ -58,9 +58,23 @@ def find_or_create_disaster_event(report: DisasterReport):
     based on the verified report. Links the report to the disaster. Adds objects
     to the current session but does *not* commit. Returns the Disaster event object or None on failure.
     """
-    if not isinstance(report, DisasterReport) or not report.verified:
-        current_app.logger.warning(f"find_or_create_disaster_event called with invalid or unverified report (ID: {getattr(report, 'id', 'N/A')}).")
-        return None # Only process valid, verified reports
+    # --- REVISED INITIAL CHECK ---
+    allowed_statuses_for_aggregation = ['verified_agg', 'api_verified']
+        
+    if not isinstance(report, DisasterReport):
+        current_app.logger.warning(f"find_or_create_disaster_event called with non-DisasterReport object.")
+        return None
+
+    if report.status not in allowed_statuses_for_aggregation:
+        current_app.logger.warning(f"find_or_create_disaster_event called for report ID {report.id} with non-aggregatable status: '{report.status}'. Skipping.")
+        return None
+            
+    # Although status should imply verified, an extra check doesn't hurt, 
+    # or ensure your logic setting these statuses also sets verified=True.
+    if not report.verified:
+        current_app.logger.warning(f"find_or_create_disaster_event called for report ID {report.id} (status: {report.status}) but report.verified is False. Skipping.")
+        return None
+    # --- END REVISED CHECK ---
 
     time_window = timedelta(hours=12) # Time window for matching events
     lat_diff = 0.5 # Degrees latitude difference approx 55km

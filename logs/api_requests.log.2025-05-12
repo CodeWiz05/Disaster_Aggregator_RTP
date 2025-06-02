@@ -1,4 +1,0 @@
-2025-05-12 23:38:47,451: API Request: GET /api/history/stats/by_type from 192.168.119.165 with args ImmutableMultiDict([])
-2025-05-12 23:38:47,451: API Request: GET /api/history/stats/by_month from 192.168.119.165 with args ImmutableMultiDict([])
-2025-05-12 23:38:47,451: API Request: GET /api/history/stats/by_severity from 192.168.119.165 with args ImmutableMultiDict([])
-2025-05-12 23:38:49,969: Download Request: GET /download/history from 192.168.119.165 with args ImmutableMultiDict([('format', 'csv')])
