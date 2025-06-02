@@ -104,10 +104,10 @@ celerybeat.pid
 
 # Environments
 .env
-*.env.* # Include .env.prod, .env.dev, etc.
+*.env.* 
 env/
 venv/
-.venv/ # Make sure to include BOTH common names
+.venv/ 
 ENV/
 env.bak/
 venv.bak/
