@@ -1,0 +1,5 @@
+2025-05-18 00:54:23,794 ERROR: error_logger: Fetch_API (NWS): Unexpected error [in C:\Numair\Coding\Disaster Aggregator\app\fetch_api.py:469]
+Traceback (most recent call last):
+  File "C:\Numair\Coding\Disaster Aggregator\app\fetch_api.py", line 377, in fetch_nws_alerts_async
+    description += f"\n\nInstructions: {instruction}"
+TypeError: unsupported operand type(s) for +=: 'NoneType' and 'str'

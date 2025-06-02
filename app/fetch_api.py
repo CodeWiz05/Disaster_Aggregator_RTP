@@ -4,13 +4,16 @@ import asyncio
 import traceback # Keep for potential manual use if needed, though logger handles exc_info
 import csv
 import io
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta  
 from app import db
 from app.models import DisasterReport
 from app import invalidate_disaster_api_cache
 from flask import current_app # For accessing app-bound loggers
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import select
+from shapely.geometry import shape
+import logging
+
 
 # --- Async Fetcher for USGS Earthquakes ---
 async def fetch_usgs_earthquakes_async(client: httpx.AsyncClient):
@@ -312,12 +315,160 @@ async def fetch_nasa_firms_wildfires_async(client: httpx.AsyncClient):
         current_app.error_logger.error(f"Fetch_API (FIRMS): Unexpected error", exc_info=True)
     return []
 
-
+NWS_USER_AGENT = "(DisasterTrack Aggregator, samaan.numair@gmail.com)"
 # --- Placeholder Fetcher for NWS/NOAA Storm/Weather Alerts ---
 async def fetch_nws_alerts_async(client: httpx.AsyncClient):
-    """ [PLACEHOLDER] Fetch active weather alerts from NWS/NOAA API. """
-    # When implemented, use current_app.fetch_logger and current_app.error_logger similarly
-    current_app.fetch_logger.info("Fetching NWS alerts... (Placeholder - Not Implemented)")
+    """ Fetches active weather alerts from NWS/NOAA API. """
+    current_app.fetch_logger.info("Fetching NWS alerts...")
+    new_reports = []
+    url = "https://api.weather.gov/alerts/active"
+    headers = {'User-Agent': NWS_USER_AGENT, 'Accept': 'application/geo+json'} # Specify GeoJSON
+
+    try:
+        response = await client.get(url, headers=headers, timeout=45.0, follow_redirects=True)
+        response.raise_for_status()
+        data = response.json()
+        current_app.fetch_logger.debug(f"NWS data received: {len(data.get('features', []))} items in collection.")
+
+        if not data.get('features'):
+            current_app.fetch_logger.info("No NWS alert features found in response.")
+            return []
+
+        for alert_feature in data['features']:
+            props = alert_feature.get('properties', {})
+            if not props:
+                current_app.fetch_logger.warning("NWS: Skipping alert due to missing 'properties'.")
+                continue
+
+            # --- Filter by status and messageType ---
+            alert_status = props.get('status')
+            message_type = props.get('messageType')
+
+            if alert_status != "Actual":
+                current_app.fetch_logger.debug(f"NWS: Skipping alert with status '{alert_status}' (ID: {props.get('id')}).")
+                continue
+            if message_type not in ["Alert", "Update"]:
+                current_app.fetch_logger.debug(f"NWS: Skipping alert with messageType '{message_type}' (ID: {props.get('id')}).")
+                continue
+
+            api_event_id = props.get('id')
+            if not api_event_id:
+                current_app.fetch_logger.warning("NWS: Skipping alert due to missing 'id' in properties.")
+                continue
+
+            # --- Deduplication ---
+            try:
+                exists = db.session.query(DisasterReport.id).filter_by(
+                    source="NWS", source_event_id=api_event_id
+                ).limit(1).scalar() is not None
+                if exists:
+                    current_app.fetch_logger.debug(f"NWS alert {api_event_id} already exists, skipping.")
+                    continue
+            except Exception as db_err:
+                 current_app.fetch_logger.error(f"NWS: DB error checking existence for {api_event_id}: {db_err}")
+                 current_app.error_logger.error(f"Fetch_API (NWS): DB error checking existence for {api_event_id}", exc_info=True)
+                 continue
+            
+            event_type_str = props.get('event', "Unknown Weather Event").strip()
+            nws_severity_str = props.get('severity', "Unknown").strip()
+            
+            title = props.get('headline') or event_type_str # Headline is often more descriptive
+            description = props.get('description', "No specific description provided.")
+            instruction = props.get('instruction')
+            if instruction:
+                description += f"\n\nInstructions: {instruction}"
+
+            timestamp_str = props.get('onset')
+            if not timestamp_str: # Check for null onset (like in KEEPALIVE)
+                current_app.fetch_logger.warning(f"NWS: Missing 'onset' timestamp for alert {api_event_id}, skipping.")
+                continue
+            try:
+                timestamp_dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+                if timestamp_dt.tzinfo is None:
+                    timestamp_dt = timestamp_dt.replace(tzinfo=timezone.utc)
+                else: # Ensure it's UTC
+                    timestamp_dt = timestamp_dt.astimezone(timezone.utc)
+            except ValueError:
+                current_app.fetch_logger.warning(f"NWS: Invalid onset timestamp format for {api_event_id}: {timestamp_str}")
+                continue
+
+            severity = 1 
+            if nws_severity_str:
+                nws_sev_lower = nws_severity_str.lower()
+                if nws_sev_lower == 'extreme': severity = 5
+                elif nws_sev_lower == 'severe': severity = 4
+                elif nws_sev_lower == 'moderate': severity = 3
+                elif nws_sev_lower == 'minor': severity = 2
+            
+            disaster_type = "weather_alert" # More generic default
+            event_lower = event_type_str.lower()
+            # More specific type mapping
+            if any(s in event_lower for s in ["tornado", "hurricane", "tropical storm", "severe thunderstorm", "wind advisory", "high wind", "special marine warning"]):
+                disaster_type = "storm"
+            elif any(s in event_lower for s in ["flood", "flash flood", "coastal flood", "flood advisory"]):
+                disaster_type = "flood"
+            elif any(s in event_lower for s in ["winter storm", "blizzard", "ice storm", "heavy snow", "lake effect snow"]):
+                disaster_type = "winter_storm"
+            elif "fire weather" in event_lower or "red flag" in event_lower:
+                disaster_type = "fire_weather"
+            elif "earthquake" in event_lower: disaster_type = "earthquake"
+            elif "tsunami" in event_lower: disaster_type = "tsunami"
+            elif "volcano" in event_lower: disaster_type = "volcano"
+            # Add more specific mappings as you observe event types
+
+            latitude, longitude = None, None
+            alert_geometry_data = alert_feature.get('geometry')
+
+            if alert_geometry_data:
+                try:
+                    geom = shape(alert_geometry_data) # Create shapely geometry object
+                    if geom.is_valid:
+                        centroid = geom.centroid
+                        latitude = centroid.y
+                        longitude = centroid.x
+                        current_app.fetch_logger.debug(f"NWS: Calculated centroid ({latitude:.4f}, {longitude:.4f}) for {api_event_id}")
+                    else:
+                        current_app.fetch_logger.warning(f"NWS: Invalid geometry for {api_event_id}, cannot calculate centroid.")
+                except Exception as shape_err:
+                    current_app.fetch_logger.warning(f"NWS: Error processing geometry for {api_event_id} with Shapely: {shape_err}")
+            
+            if latitude is None or longitude is None:
+                area_description = props.get('areaDesc', "Area description not available.")
+                current_app.fetch_logger.warning(f"NWS: Skipping alert {api_event_id} ({title}). No representative lat/lon. Area: {area_description.split(';')[0]}")
+                continue
+
+            try:
+                report = DisasterReport(
+                    source_event_id=api_event_id,
+                    title=title,
+                    description=description,
+                    disaster_type=disaster_type,
+                    latitude=latitude,
+                    longitude=longitude,
+                    timestamp=timestamp_dt,
+                    severity=severity,
+                    verified=True,
+                    source="NWS",
+                    status='api_verified'
+                )
+                new_reports.append(report)
+            except Exception as model_err:
+                 current_app.fetch_logger.error(f"NWS: Error creating DisasterReport for {api_event_id}: {model_err}")
+                 current_app.error_logger.error(f"Fetch_API (NWS): Model creation error for {api_event_id}", exc_info=True)
+                 continue
+        
+        current_app.fetch_logger.info(f"Prepared {len(new_reports)} new NWS reports for DB.")
+        return new_reports
+
+    except httpx.HTTPStatusError as e:
+        current_app.fetch_logger.error(f"NWS: HTTP error fetching alerts: {e.response.status_code} - {e.request.url}")
+        current_app.error_logger.error(f"Fetch_API (NWS): HTTPStatusError {e.response.status_code}", exc_info=True)
+    except httpx.RequestError as e:
+        current_app.fetch_logger.error(f"NWS: Network error fetching alerts: {e}")
+        current_app.error_logger.error(f"Fetch_API (NWS): RequestError", exc_info=True)
+    except Exception as e: # Includes JSONDecodeError if response is not valid JSON
+        current_app.fetch_logger.error(f"NWS: Unexpected error processing alerts: {e}", exc_info=True)
+        current_app.error_logger.error(f"Fetch_API (NWS): Unexpected error", exc_info=True)
     return []
 
 
