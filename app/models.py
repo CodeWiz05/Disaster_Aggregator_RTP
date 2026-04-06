@@ -21,6 +21,9 @@ class Disaster(db.Model):
     # location_geo = db.Column(Geometry(geometry_type='POINT', srid=4326), index=True) # PostGIS example
     severity = db.Column(db.Integer, index=True, nullable=True)
     report_count = db.Column(db.Integer, default=0)
+    __table_args__ = (
+        db.UniqueConstraint('source', 'source_event_id', name='unique_source_event'),
+    )
 
     reports = db.relationship('DisasterReport', back_populates='disaster', lazy='dynamic', cascade="all, delete-orphan")
 

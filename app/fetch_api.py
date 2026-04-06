@@ -25,8 +25,18 @@ async def fetch_with_retry(client, url, retries=3, timeout=30.0):
                 raise
             await asyncio.sleep(2 ** attempt)
 
+def log_execution(func):
+    async def wrapper(*args, **kwargs):
+        start = datetime.now(timezone.utc)
+        result = await func(*args, **kwargs)
+        duration = (datetime.now(timezone.utc) - start).total_seconds()
+        current_app.fetch_logger.info(f"{func.__name__} took {duration:.2f}s")
+        return result
+    return wrapper
+
 
 # --- Async Fetcher for USGS Earthquakes ---
+@log_execution
 async def fetch_usgs_earthquakes_async(client: httpx.AsyncClient):
     """
     Fetch earthquake data from USGS API asynchronously and prepare for DB save.
@@ -138,6 +148,7 @@ async def fetch_usgs_earthquakes_async(client: httpx.AsyncClient):
 
 
 # --- Fetcher for NASA FIRMS Wildfires ---
+@log_execution
 async def fetch_nasa_firms_wildfires_async(client: httpx.AsyncClient):
     """ Fetches wildfire hotspot data from NASA FIRMS API and saves to DB. """
     current_app.fetch_logger.info("Fetching NASA FIRMS data...")
@@ -327,6 +338,7 @@ async def fetch_nasa_firms_wildfires_async(client: httpx.AsyncClient):
 
 NWS_USER_AGENT = "(DisasterTrack Aggregator, samaan.numair@gmail.com)"
 # --- Placeholder Fetcher for NWS/NOAA Storm/Weather Alerts ---
+@log_execution
 async def fetch_nws_alerts_async(client: httpx.AsyncClient):
     """ Fetches active weather alerts from NWS/NOAA API. """
     current_app.fetch_logger.info("Fetching NWS alerts...")
@@ -483,6 +495,7 @@ async def fetch_nws_alerts_async(client: httpx.AsyncClient):
 
 
 # --- Placeholder for GDACS ---
+@log_execution
 async def fetch_gdacs_library_async():
     """ [PLACEHOLDER] Fetch various alerts from GDACS API/RSS or Library. """
     # When implemented, use current_app.fetch_logger and current_app.error_logger similarly
@@ -491,6 +504,7 @@ async def fetch_gdacs_library_async():
 
 
 # --- Main Runner Function (Includes ALL fetchers) ---
+@log_execution
 async def run_fetchers_async():
     """Runs all async fetchers concurrently and commits results to DB."""
     # Using fetch_logger for the overall process messages
