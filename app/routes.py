@@ -173,10 +173,6 @@ def report():
         limit_key = f"report:{current_user.id}"
         # Use limiter.check() to see if limit would be exceeded, though limiter handles 429 response automatically
         if not limiter.check():
-             # This block might not be reached if limiter directly aborts with 429
-             # Depending on Flask-Limiter config, it might just return False here
-             # flash("Rate limit exceeded. Please wait before submitting again.", "warning")
-             # return render_template('report_form.html', title='Submit Report', form_data=form_data), 429
              pass # Assume limiter handles the 429 response
 
         try:
@@ -296,14 +292,9 @@ def process_verification(report_id):
     """Handles the POST request from the verification panel (Verify/Reject/Spam)."""
     report = db.session.get(DisasterReport, report_id)
     if not report:
-        # Return JSON error for AJAX, or keep flash/redirect if JS handles it
-        # flash(f'Report ID {report_id} not found.', 'error')
-        # return redirect(url_for('main.verify'))
         return jsonify(success=False, message=f'Report ID {report_id} not found.'), 404
 
     if report.source != 'UserReport':
-         # flash(f'Report ID {report_id} is not a user report...', 'warning')
-         # return redirect(url_for('main.verify'))
         return jsonify(success=False, message=f'Report ID {report_id} is not a user report.'), 400
 
     action = request.form.get('action') # Still expecting form data from JS fetch

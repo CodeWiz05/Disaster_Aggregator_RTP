@@ -53,11 +53,6 @@ def admin_required(f):
 
 # --- Helper for Disaster Aggregation (Example) ---
 def find_or_create_disaster_event(report: DisasterReport):
-    """
-    Attempts to find a matching existing Disaster event or creates a new one
-    based on the verified report. Links the report to the disaster. Adds objects
-    to the current session but does *not* commit. Returns the Disaster event object or None on failure.
-    """
     # --- REVISED INITIAL CHECK ---
     allowed_statuses_for_aggregation = ['verified_agg', 'api_verified']
         
@@ -68,9 +63,7 @@ def find_or_create_disaster_event(report: DisasterReport):
     if report.status not in allowed_statuses_for_aggregation:
         current_app.logger.warning(f"find_or_create_disaster_event called for report ID {report.id} with non-aggregatable status: '{report.status}'. Skipping.")
         return None
-            
-    # Although status should imply verified, an extra check doesn't hurt, 
-    # or ensure your logic setting these statuses also sets verified=True.
+        
     if not report.verified:
         current_app.logger.warning(f"find_or_create_disaster_event called for report ID {report.id} (status: {report.status}) but report.verified is False. Skipping.")
         return None

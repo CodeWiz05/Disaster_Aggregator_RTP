@@ -14,6 +14,17 @@ from sqlalchemy import select
 from shapely.geometry import shape
 from .utils import find_or_create_disaster_event
 
+async def fetch_with_retry(client, url, retries=3, timeout=30.0):
+    for attempt in range(retries):
+        try:
+            response = await fetch_with_retry(client, url)
+            response.raise_for_status()
+            return response
+        except Exception as e:
+            if attempt == retries - 1:
+                raise
+            await asyncio.sleep(2 ** attempt)
+
 
 # --- Async Fetcher for USGS Earthquakes ---
 async def fetch_usgs_earthquakes_async(client: httpx.AsyncClient):
@@ -26,7 +37,7 @@ async def fetch_usgs_earthquakes_async(client: httpx.AsyncClient):
     current_app.fetch_logger.info("Fetching USGS data...")
     new_reports = []
     try:
-        response = await client.get(url, timeout=30.0)
+        response = await fetch_with_retry(client, url)        
         response.raise_for_status()
         data = response.json()
         current_app.fetch_logger.debug(f"USGS data received: {len(data.get('features', []))} features.")
@@ -151,8 +162,7 @@ async def fetch_nasa_firms_wildfires_async(client: httpx.AsyncClient):
     current_app.fetch_logger.debug(f"Requesting FIRMS URL")
 
     try:
-        response = await client.get(url, timeout=90.0)
-        # Specific API error handling goes to fetch_logger.error but also general error_logger
+        response = await fetch_with_retry(client, url)        # Specific API error handling goes to fetch_logger.error but also general error_logger
         if response.status_code in [401, 403]:
              current_app.fetch_logger.error(f"FIRMS API Error {response.status_code}: Invalid/unauthorized MAP_KEY.")
              current_app.error_logger.error(f"Fetch_API (FIRMS): API Key Error {response.status_code}")
@@ -325,7 +335,7 @@ async def fetch_nws_alerts_async(client: httpx.AsyncClient):
     headers = {'User-Agent': NWS_USER_AGENT, 'Accept': 'application/geo+json'} # Specify GeoJSON
 
     try:
-        response = await client.get(url, headers=headers, timeout=45.0, follow_redirects=True)
+        response = await fetch_with_retry(client, url)
         response.raise_for_status()
         data = response.json()
         current_app.fetch_logger.debug(f"NWS data received: {len(data.get('features', []))} items in collection.")
@@ -484,6 +494,7 @@ async def fetch_gdacs_library_async():
 async def run_fetchers_async():
     """Runs all async fetchers concurrently and commits results to DB."""
     # Using fetch_logger for the overall process messages
+    start_time = datetime.now(timezone.utc)
     current_app.fetch_logger.info("Starting all async fetchers...")
     all_new_reports = []
     async with httpx.AsyncClient(follow_redirects=True, timeout=90.0) as client:
@@ -577,4 +588,13 @@ async def run_fetchers_async():
             current_app.fetch_logger.error(f"Error during cache invalidation: {cache_err}", exc_info=True)
             current_app.error_logger.warning(f"Run_Fetchers: Cache invalidation failed", exc_info=True) # Warning, not critical enough to stop all
 
+    end_time = datetime.now(timezone.utc)
+    duration = (end_time - start_time).total_seconds()
+
+    total_records = len(all_new_reports)
+
+    current_app.fetch_logger.info(
+        f"Pipeline completed: {total_records} records in {duration:.2f}s "
+        f"({total_records/duration if duration else 0:.2f} records/sec)"
+    )
     current_app.fetch_logger.info("run_fetchers_async finished.")
