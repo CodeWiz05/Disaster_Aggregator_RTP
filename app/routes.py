@@ -265,6 +265,7 @@ def verify():
 @admin_required
 @limiter.limit("60 per minute") # Add rate limit if desired
 def get_unverified_reports():
+    start = datetime.now(timezone.utc)
     """API endpoint to fetch unverified user-submitted reports."""
     current_app.logger.info(f"Admin '{current_user.username}' requested unverified reports.")
     try:
@@ -276,6 +277,11 @@ def get_unverified_reports():
 
         reports_data = [report.to_dict() for report in reports_to_verify]
         current_app.logger.debug(f"Found {len(reports_data)} unverified reports.")
+        duration = (datetime.now(timezone.utc) - start).total_seconds()
+
+        current_app.api_logger.info(
+            f"Returned {len(disasters_data)} records in {duration:.2f}s"
+        )
         return jsonify(reports_data)
 
     except Exception as e:
@@ -369,7 +375,7 @@ def process_verification(report_id):
 @limiter.limit("120 per minute") # Adjust rate limit as needed
 def get_historical_reports():
     current_app.api_logger.info(f"API Request: {request.method} {request.path} from {request.remote_addr} with args {request.args}")
-
+    start = datetime.now(timezone.utc)
     try:
         # --- 1. Get Pagination Parameters ---
         page = request.args.get('page', 1, type=int)
@@ -407,6 +413,11 @@ def get_historical_reports():
             'prev_page_num': pagination.prev_num if pagination.has_prev else None  # Corrected
         }
         current_app.api_logger.info(f"API Response: Status 200, {len(reports_data)} items (Page {pagination.page}/{pagination.pages}) for {request.path}")
+        duration = (datetime.now(timezone.utc) - start).total_seconds()
+
+        current_app.api_logger.info(
+            f"Returned {len(disasters_data)} records in {duration:.2f}s"
+        )
         return jsonify(response_data)
 
     except Exception as e:

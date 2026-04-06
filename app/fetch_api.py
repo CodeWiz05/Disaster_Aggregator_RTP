@@ -1,3 +1,15 @@
+"""
+Asynchronous multi-source data ingestion pipeline.
+
+Features:
+- Concurrent API ingestion (USGS, NASA FIRMS, NWS)
+- Deduplication via DB + application logic
+- Fault tolerance with retry/backoff
+- Near real-time filtering
+- Structured transformation into normalized schema
+"""
+
+
 # app/fetch_api.py
 import httpx
 import asyncio
@@ -50,6 +62,7 @@ async def fetch_usgs_earthquakes_async(client: httpx.AsyncClient):
         response = await fetch_with_retry(client, url)        
         response.raise_for_status()
         data = response.json()
+        one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
         current_app.fetch_logger.debug(f"USGS data received: {len(data.get('features', []))} features.")
 
         for feature in data.get('features', []):
@@ -92,6 +105,8 @@ async def fetch_usgs_earthquakes_async(client: httpx.AsyncClient):
             try:
                 timestamp_ms = props['time']
                 timestamp_dt = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc)
+                if timestamp_dt < one_hour_ago:
+                    continue
             except (TypeError, ValueError, OverflowError) as ts_err:
                  current_app.fetch_logger.warning(f"Skipping USGS record {api_event_id} due to invalid timestamp '{props.get('time')}': {ts_err}")
                  continue
@@ -193,6 +208,7 @@ async def fetch_nasa_firms_wildfires_async(client: httpx.AsyncClient):
         if len(lines) <= 1:
              current_app.fetch_logger.info("No active fires found in FIRMS response.")
              return []
+        one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
         current_app.fetch_logger.debug(f"FIRMS CSV received ({len(lines)} lines). Parsing...")
 
         csvfile = io.StringIO(csv_data)
@@ -271,6 +287,8 @@ async def fetch_nasa_firms_wildfires_async(client: httpx.AsyncClient):
                 
                 dt_str = f"{date_str} {time_str}"
                 timestamp_dt = datetime.strptime(dt_str, "%Y-%m-%d %H%M").replace(tzinfo=timezone.utc)
+                if timestamp_dt < one_hour_ago:
+                    continue
                 
                 severity = 1
                 confidence_str_display = str(confidence_raw)
@@ -350,6 +368,7 @@ async def fetch_nws_alerts_async(client: httpx.AsyncClient):
         response = await fetch_with_retry(client, url)
         response.raise_for_status()
         data = response.json()
+        one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)  
         current_app.fetch_logger.debug(f"NWS data received: {len(data.get('features', []))} items in collection.")
 
         if not data.get('features'):
@@ -406,6 +425,8 @@ async def fetch_nws_alerts_async(client: httpx.AsyncClient):
                 continue
             try:
                 timestamp_dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+                if timestamp_dt < one_hour_ago:
+                    continue
                 if timestamp_dt.tzinfo is None:
                     timestamp_dt = timestamp_dt.replace(tzinfo=timezone.utc)
                 else: # Ensure it's UTC
@@ -550,7 +571,7 @@ async def run_fetchers_async():
     current_app.fetch_logger.info(f"Total valid reports prepared for DB: {len(all_new_reports)}. Attempting commit...")
     linked_disaster_events = [] # To keep track for logging
     try:
-        db.session.add_all(all_new_reports)
+        db.session.bulk_save_objects(all_new_reports)
         db.session.commit()
         total_added_count = len(all_new_reports)
         current_app.fetch_logger.info(f"Successfully committed {total_added_count} new reports.")
