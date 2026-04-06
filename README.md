@@ -1,117 +1,163 @@
-# Disaster Aggregator Platform
+# 🌍 DisasterTrack — Real-Time Multi-Source Data Ingestion Platform
 
-A comprehensive web platform for aggregating, visualizing, and reporting disaster events globally. This application integrates real-time disaster data from multiple sources, allows user-submitted reports, and provides notification capabilities.
+A production-style data pipeline designed to ingest, process, and serve real-time geospatial disaster data from multiple authoritative sources.
 
-## Features
+---
 
-- **Live Disaster Tracking**: View real-time disaster data on an interactive map and in tabular format
-- **User Report Submission**: Submit first-hand disaster reports with location, type, severity, and media
-- **Verification System**: Crowd-sourced verification of user-submitted reports
-- **Multi-channel Alerts**: Receive notifications via email, SMS, and web notifications
-- **Historical Data Analysis**: View and analyze past disaster events and trends
-- **APIs Integration**: Data collection from USGS, GDACS, and other disaster monitoring services
+## 🚀 Overview
 
-## Tech Stack
+DisasterTrack is a **backend-first data engineering system** that aggregates disaster events from APIs such as:
 
-- **Backend**: Flask (Python)
-- **Frontend**: HTML, CSS, JavaScript
-- **Database**: SQLite (Development), PostgreSQL (Production)
-- **Mapping**: OpenStreetMap/Google Maps
-- **Notifications**: Email service and Twilio for SMS
+- USGS (Earthquakes)
+- NASA FIRMS (Wildfires)
+- NOAA/NWS (Weather Alerts)
 
-## Installation and Setup
+The platform focuses on **reliable ingestion, deduplication, and structured data transformation**, enabling downstream analytics, visualization, and alerting systems.
 
-### Prerequisites
+---
 
-- Python 3.8+
-- Pip package manager
-- Git
+## 🧠 System Design
 
-### Installation Steps
+### Core Pipeline
+External APIs → Async Fetchers → Validation & Deduplication → DB Storage → API Layer
 
-1. Clone the repository:
-   ```
-   git clone https://github.com/yourusername/disaster-aggregator.git
-   cd disaster-aggregator
-   ```
+### Key Characteristics
 
-2. Create and activate a virtual environment:
-   ```
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
+- **Asynchronous ingestion pipeline** using `httpx.AsyncClient`
+- **Concurrent multi-source data fetching** via `asyncio.gather`
+- **Near real-time processing** using time-window filtering
+- **Fault-tolerant architecture** with retry & exponential backoff
+- **Database-level deduplication constraints**
+- **Structured transformation into normalized schema**
 
-3. Install dependencies:
-   ```
-   pip install -r requirements.txt
-   ```
+---
 
-4. Set up environment variables:
-   - Copy `.env.example` to `.env`
-   - Update the variables in `.env` with your API keys and configuration
+## ⚙️ Tech Stack
 
-5. Initialize the database:
-   ```
-   flask db init
-   flask db migrate -m "Initial migration"
-   flask db upgrade
-   ```
+### Backend
+- Python (Flask)
+- PostgreSQL / SQLite
+- SQLAlchemy ORM
 
-6. Run the application:
-   ```
-   python run.py
-   ```
+### Data Engineering
+- Async IO (`asyncio`, `httpx`)
+- REST API ingestion
+- Geospatial processing (Shapely)
 
-7. Access the application at `http://localhost:5000`
+### Infrastructure
+- Docker (containerization-ready)
+- GitHub Actions (CI/CD basics)
 
-## Project Structure
+---
 
-```
-disaster-aggregator/
-├── app/                  # Application package
-│   ├── __init__.py       # Application factory
-│   ├── routes.py         # URL routes and views
-│   ├── scraper.py        # Disaster data scraper
-│   ├── fetch_api.py      # API integration client
-│   ├── verify.py         # Report verification logic
-│   ├── utils.py          # Utility functions
-│   └── models.py         # Database models
-├── templates/            # HTML templates
-├── static/               # Static files (CSS, JS, images)
-├── data/                 # Data files
-├── migrations/           # Database migrations
-├── requirements.txt      # Python dependencies
-├── .env                  # Environment variables
-├── config.py             # Configuration settings
-├── run.py                # Application entry point
-└── database.db           # SQLite database file
-```
+## 🔥 Key Engineering Highlights
 
-## API Documentation
+### 1. Multi-Source Async Ingestion
+- Concurrently ingests data from multiple APIs
+- Reduces latency using parallel fetch execution
 
-The platform provides RESTful APIs to access disaster data:
+### 2. Fault-Tolerant Fetching
+- Implemented retry mechanisms with exponential backoff
+- Handles network failures and API instability gracefully
 
-- `GET /api/disasters`: List all disasters
-- `GET /api/disasters/{id}`: Get details of a specific disaster
-- `POST /api/reports`: Submit a new disaster report
-- `GET /api/reports/verified`: Get verified user reports
+### 3. Deduplication Strategy
+- Application-level deduplication using `source_event_id`
+- Enforced **database-level uniqueness constraints**
+- Prevents duplicate entries across streaming batches
 
-See full API documentation in the `/docs` endpoint when running the application.
+### 4. Near Real-Time Processing
+- Time-window filtering ensures only recent events are processed
+- Simulates streaming-style ingestion behavior
 
-## Contributing
+### 5. Pipeline Observability
+- Structured logging across ingestion stages
+- Tracks:
+  - ingestion counts
+  - processing latency
+  - throughput (records/sec)
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+### 6. Optimized Data Retrieval
+- SQL window functions used to fetch **top-N events per category**
+- Efficient query design for large datasets
 
-## License
+---
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+## 📊 Data Flow
 
-## Acknowledgments
+1. Fetch disaster data asynchronously from external APIs  
+2. Validate schema and discard malformed records  
+3. Apply deduplication (DB + in-memory checks)  
+4. Transform into normalized `DisasterReport` schema  
+5. Store in database with relational linkage  
+6. Serve via optimized API endpoints  
 
-- Data sources: USGS, GDACS, ReliefWeb
-- OpenStreetMap/Google Maps for mapping capabilities
-- Twilio for SMS alert functionality
+---
+
+## 📡 API Endpoints
+
+### Get Latest Disaster Events
+GET /api/disasters
+
+Returns top-N recent events per disaster type using optimized SQL queries.
+
+---
+
+### Historical Data
+GET /api/history/reports
+
+Supports:
+- date range filtering
+- severity filtering
+- pagination
+
+---
+
+### User Reports
+POST /api/reports
+
+Allows crowd-sourced disaster reporting with moderation workflow.
+
+---
+
+## 🏗️ Project Structure
+app/
+├── fetch_api.py # Async ingestion pipeline
+├── models.py # Database schema
+├── routes.py # API endpoints
+├── verify.py # (Reserved for advanced verification logic)
+├── utils.py # Helper utilities
+
+
+---
+
+## ⚠️ Notes on Design Choices
+
+- The system prioritizes **data reliability over raw ingestion volume**
+- Designed as a **pipeline-first architecture**, not UI-first
+- Built to simulate **real-world data engineering workflows**
+
+---
+
+## 🚧 Future Improvements
+
+- Streaming integration (Kafka / event-driven architecture)
+- Distributed processing for large-scale ingestion
+- ML-based anomaly detection on disaster patterns
+- Real-time alerting system
+
+---
+
+## 💡 Why This Project
+
+This project was built to explore:
+
+- real-world data ingestion challenges  
+- building reliable backend pipelines  
+- handling noisy, inconsistent external data sources  
+- designing scalable data systems  
+
+---
+
+## 📜 License
+
+MIT License
